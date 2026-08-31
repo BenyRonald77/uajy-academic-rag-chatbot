@@ -1,0 +1,30 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Streamlit secrets (JANGAN di-commit!)
+.streamlit/secrets.toml
+
+# Environment variables
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Index files (generated, bisa di-regenerate)
+# Uncomment baris di bawah jika tidak ingin commit index ke repo
+# index/
+
+# Logs
+*.log

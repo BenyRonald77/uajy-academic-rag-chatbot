@@ -1,0 +1,162 @@
+[
+  {
+    "id": 1,
+    "question": "Berapa minimal SKS yang harus ditempuh untuk mengajukan skripsi?",
+    "expected_answer_contains": ["SKS", "skripsi"],
+    "expected_pages": [],
+    "category": "in_scope",
+    "notes": "Isi expected_pages setelah dokumen tersedia"
+  },
+  {
+    "id": 2,
+    "question": "Bagaimana prosedur pengajuan cuti kuliah?",
+    "expected_answer_contains": ["cuti", "prosedur"],
+    "expected_pages": [],
+    "category": "in_scope",
+    "notes": ""
+  },
+  {
+    "id": 3,
+    "question": "Apa saja syarat untuk mengikuti yudisium?",
+    "expected_answer_contains": ["yudisium", "syarat"],
+    "expected_pages": [],
+    "category": "in_scope",
+    "notes": ""
+  },
+  {
+    "id": 4,
+    "question": "Berapa IPK minimum untuk lulus cum laude?",
+    "expected_answer_contains": ["IPK", "cum laude"],
+    "expected_pages": [],
+    "category": "in_scope",
+    "notes": ""
+  },
+  {
+    "id": 5,
+    "question": "Berapa lama masa studi maksimal untuk program S1?",
+    "expected_answer_contains": ["masa studi", "semester"],
+    "expected_pages": [],
+    "category": "in_scope",
+    "notes": ""
+  },
+  {
+    "id": 6,
+    "question": "Bagaimana cara mengajukan KRS online?",
+    "expected_answer_contains": ["KRS"],
+    "expected_pages": [],
+    "category": "in_scope",
+    "notes": ""
+  },
+  {
+    "id": 7,
+    "question": "Apa sanksi bagi mahasiswa yang melakukan plagiarisme?",
+    "expected_answer_contains": ["plagiarisme", "sanksi"],
+    "expected_pages": [],
+    "category": "in_scope",
+    "notes": ""
+  },
+  {
+    "id": 8,
+    "question": "Berapa batas waktu pembayaran SPP?",
+    "expected_answer_contains": ["SPP", "pembayaran"],
+    "expected_pages": [],
+    "category": "in_scope",
+    "notes": ""
+  },
+  {
+    "id": 9,
+    "question": "Apa syarat untuk pindah program studi?",
+    "expected_answer_contains": ["pindah", "program studi"],
+    "expected_pages": [],
+    "category": "in_scope",
+    "notes": ""
+  },
+  {
+    "id": 10,
+    "question": "Bagaimana sistem penilaian (grading) yang berlaku?",
+    "expected_answer_contains": ["nilai", "grading"],
+    "expected_pages": [],
+    "category": "in_scope",
+    "notes": ""
+  },
+  {
+    "id": 11,
+    "question": "Apa saja hak dan kewajiban mahasiswa?",
+    "expected_answer_contains": ["hak", "kewajiban"],
+    "expected_pages": [],
+    "category": "in_scope",
+    "notes": ""
+  },
+  {
+    "id": 12,
+    "question": "Bagaimana prosedur pengajuan beasiswa?",
+    "expected_answer_contains": ["beasiswa"],
+    "expected_pages": [],
+    "category": "in_scope",
+    "notes": ""
+  },
+  {
+    "id": 13,
+    "question": "Apa itu mata kuliah prasyarat?",
+    "expected_answer_contains": ["prasyarat", "mata kuliah"],
+    "expected_pages": [],
+    "category": "in_scope",
+    "notes": ""
+  },
+  {
+    "id": 14,
+    "question": "Berapa jumlah SKS yang harus ditempuh untuk lulus?",
+    "expected_answer_contains": ["SKS", "lulus"],
+    "expected_pages": [],
+    "category": "in_scope",
+    "notes": ""
+  },
+  {
+    "id": 15,
+    "question": "Bagaimana prosedur mengajukan surat keterangan aktif kuliah?",
+    "expected_answer_contains": ["surat keterangan"],
+    "expected_pages": [],
+    "category": "in_scope",
+    "notes": ""
+  },
+  {
+    "id": 16,
+    "question": "Siapa presiden Indonesia saat ini?",
+    "expected_answer_contains": ["di luar cakupan", "tidak dapat menjawab", "dokumen"],
+    "expected_pages": [],
+    "category": "out_of_scope",
+    "notes": "Harus ditolak sopan"
+  },
+  {
+    "id": 17,
+    "question": "Apa rumus pythagoras?",
+    "expected_answer_contains": ["di luar cakupan", "tidak dapat menjawab", "dokumen"],
+    "expected_pages": [],
+    "category": "out_of_scope",
+    "notes": "Harus ditolak sopan"
+  },
+  {
+    "id": 18,
+    "question": "Berapa harga iPhone terbaru?",
+    "expected_answer_contains": ["di luar cakupan", "tidak dapat menjawab", "dokumen"],
+    "expected_pages": [],
+    "category": "out_of_scope",
+    "notes": "Harus ditolak sopan"
+  },
+  {
+    "id": 19,
+    "question": "Ceritakan tentang sejarah perang dunia kedua",
+    "expected_answer_contains": ["di luar cakupan", "tidak dapat menjawab", "dokumen"],
+    "expected_pages": [],
+    "category": "out_of_scope",
+    "notes": "Harus ditolak sopan"
+  },
+  {
+    "id": 20,
+    "question": "Bagaimana cara memasak nasi goreng?",
+    "expected_answer_contains": ["di luar cakupan", "tidak dapat menjawab", "dokumen"],
+    "expected_pages": [],
+    "category": "out_of_scope",
+    "notes": "Harus ditolak sopan"
+  }
+]
