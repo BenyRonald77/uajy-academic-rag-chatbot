@@ -212,6 +212,10 @@ python eval/run_eval.py
 
 ---
 
+## Streamlit
+
+- https://uajyachatbot.streamlit.app/
+
 <div align="center">
   <sub>Developed with ❤️ by <a href="https://github.com/BenyRonald77">Beny Ronald</a> for Universitas Atma Jaya Yogyakarta</sub>
 </div>
