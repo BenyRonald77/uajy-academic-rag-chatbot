@@ -64,9 +64,11 @@ def build_prompt(
         parts.append("=" * 50)
 
         for i, chunk in enumerate(retrieved_chunks, 1):
-            pages = ", ".join(str(p) for p in chunk.page_numbers)
-            section = f" — {chunk.section_title}" if chunk.section_title else ""
-            parts.append(f"\n--- Sumber #{i} (Halaman {pages}{section}) ---")
+            # `page_label` memberi rentang halaman yang ringkas ("51" atau
+            # "51-52") dan `heading_label` memberi jalur bagian berjenjang,
+            # sehingga LLM dapat mengutip sumber setepat mungkin.
+            section = f" — {chunk.heading_label}" if chunk.heading_label else ""
+            parts.append(f"\n--- Sumber #{i} (Halaman {chunk.page_label}{section}) ---")
             parts.append(chunk.text)
 
         parts.append("\n" + "=" * 50)

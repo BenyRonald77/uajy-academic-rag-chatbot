@@ -1,251 +1,476 @@
 """
-run_eval.py — Evaluasi kualitas RAG chatbot.
-
-Menguji:
-1. Retrieval quality (recall@k)
-2. Answer faithfulness
-3. Refusal correctness (untuk pertanyaan di luar dokumen)
-4. Latency
+run_eval.py — Evaluasi kualitas retrieval RAG, dijalankan sebagai *ablation
+study*.
 
 Usage:
+    # Bandingkan dense-only vs hybrid vs hybrid+rerank
     python eval/run_eval.py
-    python eval/run_eval.py --api-key YOUR_KEY
+
+    # Hanya satu konfigurasi
+    python eval/run_eval.py --mode hybrid_rerank
+
+    # Tanpa uji percakapan lanjutan (hemat panggilan API)
+    python eval/run_eval.py --skip-conversational
+
+Kenapa metriknya diperketat
+--------------------------
+Versi awal skrip ini menganggap sebuah query berhasil bila **salah satu**
+kata kunci muncul di gabungan seluruh chunk yang terambil::
+
+    keywords_found = any(kw in all_text for kw in expected)
+
+Ukuran itu terlalu longgar sampai hampir tidak mungkin gagal. Pertanyaan
+"Apa sanksi bagi mahasiswa yang melakukan plagiarisme?" dinyatakan lolos
+hanya karena kata "sanksi" muncul di suatu tempat — padahal kata "plagiat"
+sama sekali tidak ada di dokumen, sehingga pertanyaan itu memang tidak bisa
+dijawab. Angka 100% yang dihasilkan mencerminkan kelonggaran metrik, bukan
+kualitas sistem.
+
+Versi ini memakai ukuran yang bisa dipertanggungjawabkan:
+
+- **Page Recall@k** — apakah ada chunk terambil yang berasal dari halaman
+  yang sudah diverifikasi memuat jawabannya. Relevansi tingkat halaman
+  bersifat objektif dan tidak bisa "dicurangi" oleh kata umum.
+- **MRR** — seberapa tinggi peringkat chunk relevan pertama. Membedakan
+  sistem yang menempatkan jawaban di peringkat 1 dari yang menaruhnya di
+  peringkat 4.
+- **Cakupan kata kunci** — SELURUH kata kunci wajib muncul, bukan salah satu.
+- **Akurasi penolakan** — untuk pertanyaan di luar cakupan.
+- **Penolakan salah** — pertanyaan yang layak dijawab tetapi ikut ditolak.
+  Tanpa metrik ini, sistem bisa memoles angka penolakan dengan cara menolak
+  segalanya.
 """
 
-import sys
-import json
-import time
+from __future__ import annotations
+
 import argparse
+import json
+import statistics
+import sys
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ingestion.build_index import get_embeddings
-from app.retrieval import DocumentRetriever
-from app.prompt_builder import build_prompt, build_no_context_response
+from app.cli_utils import enable_utf8_stdout
+from app.config import ABLATION_PRESETS, EVAL_DIR, RetrievalConfig
+from app.retrieval import HybridRetriever, RetrievalOutcome
+
+TEST_QUESTIONS_PATH = EVAL_DIR / "test_questions.json"
+RESULTS_PATH = EVAL_DIR / "eval_results.json"
+
+#: Urutan preset saat ditampilkan, dari paling sederhana ke paling lengkap.
+PRESET_ORDER = ["dense", "hybrid", "hybrid_rerank"]
+
+PRESET_LABELS = {
+    "dense": "Dense only (baseline)",
+    "hybrid": "Hybrid (BM25 + dense, RRF)",
+    "hybrid_rerank": "Hybrid + reranker LLM",
+}
 
 
 # ──────────────────────────────────────────────
-# Konfigurasi
+# Struktur hasil
 # ──────────────────────────────────────────────
 
-TEST_QUESTIONS_PATH = Path(__file__).resolve().parent / "test_questions.json"
-DEFAULT_TOP_K = 4
-SIMILARITY_THRESHOLD = 0.30
+@dataclass
+class QuestionResult:
+    """Hasil satu pertanyaan pada satu konfigurasi."""
+
+    id: int
+    question: str
+    category: str
+    is_conversational: bool = False
+
+    expected_pages: list[int] = field(default_factory=list)
+    retrieved_pages: list[int] = field(default_factory=list)
+    page_hit: bool = False
+    first_relevant_rank: int | None = None
+
+    expected_keywords: list[str] = field(default_factory=list)
+    missing_keywords: list[str] = field(default_factory=list)
+    keyword_hit: bool = False
+
+    refused: bool = False
+    refusal_reason: str = ""
+    effective_query: str = ""
+    was_rewritten: bool = False
+
+    top_dense_score: float = 0.0
+    latency_ms: float = 0.0
+    timings_ms: dict = field(default_factory=dict)
+
+    @property
+    def reciprocal_rank(self) -> float:
+        return 1.0 / self.first_relevant_rank if self.first_relevant_rank else 0.0
+
+    def to_dict(self) -> dict:
+        data = self.__dict__.copy()
+        data["reciprocal_rank"] = round(self.reciprocal_rank, 4)
+        return data
 
 
-def load_test_questions() -> list[dict]:
-    """Load pertanyaan uji dari JSON."""
-    with open(TEST_QUESTIONS_PATH, "r", encoding="utf-8") as f:
+# ──────────────────────────────────────────────
+# Pemuatan & penilaian
+# ──────────────────────────────────────────────
+
+def load_test_questions(path: Path = TEST_QUESTIONS_PATH) -> list[dict]:
+    """Muat pertanyaan uji dari JSON."""
+    if not path.exists():
+        raise FileNotFoundError(f"Berkas pertanyaan uji tidak ditemukan: {path}")
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def evaluate_retrieval(
-    retriever: DocumentRetriever,
-    questions: list[dict],
-    api_key: str,
-    top_k: int = DEFAULT_TOP_K,
-) -> dict:
-    """
-    Evaluasi kualitas retrieval.
+def score_question(question: dict, outcome: RetrievalOutcome, latency_ms: float) -> QuestionResult:
+    """Nilai satu hasil retrieval terhadap kunci jawaban."""
+    expected_pages = question.get("expected_pages") or []
+    expected_keywords = question.get("expected_answer_contains") or []
 
-    Returns:
-        Dict dengan metrik retrieval.
-    """
-    from google import genai
+    retrieved_pages: list[int] = []
+    first_relevant_rank: int | None = None
 
-    client = genai.Client(api_key=api_key)
-    in_scope_questions = [q for q in questions if q["category"] == "in_scope"]
+    for rank, candidate in enumerate(outcome.contexts, start=1):
+        retrieved_pages.extend(candidate.page_numbers)
+        if first_relevant_rank is None and expected_pages:
+            if set(candidate.page_numbers) & set(expected_pages):
+                first_relevant_rank = rank
 
-    total = len(in_scope_questions)
-    hits = 0
-    latencies = []
+    combined_text = " ".join(c.text.lower() for c in outcome.contexts)
+    missing = [kw for kw in expected_keywords if kw.lower() not in combined_text]
 
-    print(f"\n{'='*60}")
-    print(f"📊 EVALUASI RETRIEVAL (top_k={top_k})")
-    print(f"{'='*60}")
+    return QuestionResult(
+        id=question["id"],
+        question=question["question"],
+        category=question.get("category", "in_scope"),
+        is_conversational=bool(question.get("chat_history")),
+        expected_pages=expected_pages,
+        retrieved_pages=sorted(set(retrieved_pages)),
+        page_hit=first_relevant_rank is not None,
+        first_relevant_rank=first_relevant_rank,
+        expected_keywords=expected_keywords,
+        missing_keywords=missing,
+        # Seluruh kata kunci wajib ada, bukan salah satu.
+        keyword_hit=bool(expected_keywords) and not missing,
+        refused=outcome.refused,
+        refusal_reason=outcome.refusal_reason,
+        effective_query=outcome.effective_query,
+        was_rewritten=outcome.was_rewritten,
+        top_dense_score=round(
+            max((c.dense_score for c in outcome.candidates), default=0.0), 4
+        ),
+        latency_ms=round(latency_ms, 1),
+        timings_ms={k: round(v, 1) for k, v in outcome.timings_ms.items()},
+    )
 
-    for q in in_scope_questions:
-        start = time.time()
 
-        # Get embedding
-        result = client.models.embed_content(
-            model="gemini-embedding-001",
-            contents=q["question"],
-        )
-        query_embedding = result.embeddings[0].values
+def aggregate(results: list[QuestionResult]) -> dict:
+    """Hitung metrik ringkas dari hasil per pertanyaan."""
+    in_scope = [r for r in results if r.category == "in_scope"]
+    out_of_scope = [r for r in results if r.category == "out_of_scope"]
+    conversational = [r for r in in_scope if r.is_conversational]
 
-        # Search
-        results = retriever.search(
-            query_embedding=query_embedding,
-            top_k=top_k,
-            threshold=SIMILARITY_THRESHOLD,
-        )
+    scorable = [r for r in in_scope if r.expected_pages]
 
-        elapsed = time.time() - start
-        latencies.append(elapsed)
+    page_hits = sum(1 for r in scorable if r.page_hit)
+    keyword_scorable = [r for r in in_scope if r.expected_keywords]
+    keyword_hits = sum(1 for r in keyword_scorable if r.keyword_hit)
+    false_refusals = sum(1 for r in in_scope if r.refused)
+    correct_refusals = sum(1 for r in out_of_scope if r.refused)
+    conversational_hits = sum(1 for r in conversational if r.page_hit)
 
-        # Check if expected keywords are found in retrieved chunks
-        all_text = " ".join(r.text.lower() for r in results)
-        keywords_found = any(
-            kw.lower() in all_text
-            for kw in q.get("expected_answer_contains", [])
-        )
+    latencies = [r.latency_ms for r in results]
 
-        status = "✅" if keywords_found else "❌"
-        hits += 1 if keywords_found else 0
-
-        print(f"\n{status} Q{q['id']}: {q['question']}")
-        print(f"   Chunks retrieved: {len(results)}")
-        if results:
-            top_score = max(r.similarity_score for r in results)
-            print(f"   Top similarity: {top_score:.3f}")
-        print(f"   Keywords found: {keywords_found}")
-        print(f"   Latency: {elapsed:.2f}s")
-
-    recall = hits / total if total > 0 else 0
-    avg_latency = sum(latencies) / len(latencies) if latencies else 0
-
-    print(f"\n{'─'*60}")
-    print(f"📊 Retrieval Recall@{top_k}: {recall:.1%} ({hits}/{total})")
-    print(f"⏱️  Avg retrieval latency: {avg_latency:.2f}s")
-    print(f"{'─'*60}")
+    def ratio(hits: int, total: int) -> float:
+        return hits / total if total else 0.0
 
     return {
-        "recall_at_k": recall,
-        "hits": hits,
-        "total": total,
-        "avg_latency_s": avg_latency,
-    }
-
-
-def evaluate_refusal(
-    retriever: DocumentRetriever,
-    questions: list[dict],
-    api_key: str,
-) -> dict:
-    """
-    Evaluasi refusal correctness untuk pertanyaan di luar dokumen.
-
-    Returns:
-        Dict dengan metrik refusal.
-    """
-    from google import genai
-
-    client = genai.Client(api_key=api_key)
-    oos_questions = [q for q in questions if q["category"] == "out_of_scope"]
-
-    total = len(oos_questions)
-    correct_refusals = 0
-
-    print(f"\n{'='*60}")
-    print(f"🚫 EVALUASI REFUSAL CORRECTNESS")
-    print(f"{'='*60}")
-
-    for q in oos_questions:
-        # Get embedding
-        result = client.models.embed_content(
-            model="gemini-embedding-001",
-            contents=q["question"],
-        )
-        query_embedding = result.embeddings[0].values
-
-        # Search
-        results = retriever.search(
-            query_embedding=query_embedding,
-            top_k=DEFAULT_TOP_K,
-            threshold=SIMILARITY_THRESHOLD,
-        )
-
-        # Pertanyaan OOS seharusnya tidak menemukan konteks relevan
-        refused = len(results) == 0
-        correct_refusals += 1 if refused else 0
-
-        status = "✅" if refused else "⚠️"
-        print(f"\n{status} Q{q['id']}: {q['question']}")
-        print(f"   Chunks retrieved: {len(results)} (expected: 0)")
-        if results:
-            print(f"   ⚠️ False positive — chunk ditemukan tapi seharusnya tidak")
-            for r in results:
-                print(f"      Score: {r.similarity_score:.3f} — {r.text[:100]}...")
-
-    accuracy = correct_refusals / total if total > 0 else 0
-
-    print(f"\n{'─'*60}")
-    print(f"🚫 Refusal Accuracy: {accuracy:.1%} ({correct_refusals}/{total})")
-    print(f"{'─'*60}")
-
-    return {
-        "refusal_accuracy": accuracy,
+        "page_recall": ratio(page_hits, len(scorable)),
+        "page_recall_hits": page_hits,
+        "page_recall_total": len(scorable),
+        "mrr": (
+            statistics.mean(r.reciprocal_rank for r in scorable) if scorable else 0.0
+        ),
+        "keyword_coverage": ratio(keyword_hits, len(keyword_scorable)),
+        "keyword_hits": keyword_hits,
+        "keyword_total": len(keyword_scorable),
+        "refusal_accuracy": ratio(correct_refusals, len(out_of_scope)),
         "correct_refusals": correct_refusals,
-        "total": total,
+        "out_of_scope_total": len(out_of_scope),
+        "false_refusal_rate": ratio(false_refusals, len(in_scope)),
+        "false_refusals": false_refusals,
+        "in_scope_total": len(in_scope),
+        "conversational_recall": ratio(conversational_hits, len(conversational)),
+        "conversational_hits": conversational_hits,
+        "conversational_total": len(conversational),
+        "avg_latency_ms": statistics.mean(latencies) if latencies else 0.0,
+        "median_latency_ms": statistics.median(latencies) if latencies else 0.0,
     }
 
 
-def run_full_evaluation(api_key: str) -> dict:
-    """Jalankan evaluasi lengkap."""
-    print("\n" + "=" * 60)
-    print("🚀 EVALUASI LENGKAP — RAG Chatbot Kampus UAJY")
-    print("=" * 60)
+# ──────────────────────────────────────────────
+# Eksekusi
+# ──────────────────────────────────────────────
 
-    # Load components
+def evaluate_preset(
+    retriever: HybridRetriever,
+    questions: list[dict],
+    config: RetrievalConfig,
+    preset_name: str,
+    api_key: str | None = None,
+    verbose: bool = True,
+) -> tuple[list[QuestionResult], dict]:
+    """
+    Jalankan seluruh pertanyaan uji pada satu konfigurasi retrieval.
+
+    Returns:
+        Tuple ``(hasil per pertanyaan, metrik agregat)``.
+    """
+    label = PRESET_LABELS.get(preset_name, preset_name)
+    print(f"\n{'=' * 74}")
+    print(f"⚙️  KONFIGURASI: {label}")
+    print(f"    hybrid={config.use_hybrid}  rerank={config.use_rerank}  "
+          f"rewrite={config.use_query_rewrite}  top_k={config.top_k}")
+    print(f"{'=' * 74}")
+
+    results: list[QuestionResult] = []
+
+    for question in questions:
+        started = time.perf_counter()
+        try:
+            outcome = retriever.retrieve(
+                question["question"],
+                config=config,
+                chat_history=question.get("chat_history"),
+                api_key=api_key,
+            )
+        except Exception as e:
+            print(f"  ❌ Q{question['id']} gagal: {e}")
+            continue
+
+        latency_ms = (time.perf_counter() - started) * 1000
+        result = score_question(question, outcome, latency_ms)
+        results.append(result)
+
+        if verbose:
+            _print_question_result(result)
+
+    metrics = aggregate(results)
+    _print_preset_summary(metrics)
+    return results, metrics
+
+
+def _print_question_result(result: QuestionResult) -> None:
+    """Cetak satu baris hasil pertanyaan beserta alasannya."""
+    if result.category == "out_of_scope":
+        icon = "✅" if result.refused else "❌"
+        verdict = "ditolak" if result.refused else "TIDAK ditolak"
+    else:
+        icon = "✅" if result.page_hit else "❌"
+        verdict = "halaman relevan ditemukan" if result.page_hit else "halaman relevan TIDAK ditemukan"
+        if result.refused:
+            icon, verdict = "❌", "ditolak padahal seharusnya dijawab"
+
+    tag = " [percakapan]" if result.is_conversational else ""
+    print(f"\n  {icon} Q{result.id}{tag}: {result.question}")
+    print(f"       {verdict}")
+
+    if result.was_rewritten:
+        print(f"       ditulis ulang → {result.effective_query!r}")
+
+    if result.category == "in_scope":
+        print(f"       halaman diharapkan {result.expected_pages} · "
+              f"terambil {result.retrieved_pages}")
+        if result.first_relevant_rank:
+            print(f"       peringkat relevan pertama: {result.first_relevant_rank} "
+                  f"(RR={result.reciprocal_rank:.2f})")
+        if result.missing_keywords:
+            print(f"       kata kunci tidak ditemukan: {result.missing_keywords}")
+
+    if result.refused and result.refusal_reason:
+        print(f"       alasan: {result.refusal_reason}")
+
+    print(f"       cosine tertinggi {result.top_dense_score:.3f} · "
+          f"latensi {result.latency_ms:.0f} ms")
+
+
+def _print_preset_summary(metrics: dict) -> None:
+    print(f"\n  {'─' * 70}")
+    print(f"  📊 Page Recall@k        : {metrics['page_recall']:.1%} "
+          f"({metrics['page_recall_hits']}/{metrics['page_recall_total']})")
+    print(f"  📈 MRR                  : {metrics['mrr']:.3f}")
+    print(f"  🔤 Cakupan kata kunci   : {metrics['keyword_coverage']:.1%} "
+          f"({metrics['keyword_hits']}/{metrics['keyword_total']}) — semua kata kunci wajib ada")
+    print(f"  🚫 Akurasi penolakan    : {metrics['refusal_accuracy']:.1%} "
+          f"({metrics['correct_refusals']}/{metrics['out_of_scope_total']})")
+    print(f"  ⚠️  Penolakan salah      : {metrics['false_refusal_rate']:.1%} "
+          f"({metrics['false_refusals']}/{metrics['in_scope_total']})")
+    if metrics["conversational_total"]:
+        print(f"  💬 Recall percakapan    : {metrics['conversational_recall']:.1%} "
+              f"({metrics['conversational_hits']}/{metrics['conversational_total']})")
+    print(f"  ⏱️  Latensi              : rata-rata {metrics['avg_latency_ms']:.0f} ms · "
+          f"median {metrics['median_latency_ms']:.0f} ms")
+    print(f"  {'─' * 70}")
+
+
+def print_comparison(all_metrics: dict[str, dict]) -> None:
+    """Cetak tabel perbandingan antar konfigurasi."""
+    if len(all_metrics) < 2:
+        return
+
+    names = [name for name in PRESET_ORDER if name in all_metrics]
+    names += [name for name in all_metrics if name not in names]
+
+    rows = [
+        ("Page Recall@k", "page_recall", "pct"),
+        ("MRR", "mrr", "num"),
+        ("Cakupan kata kunci", "keyword_coverage", "pct"),
+        ("Akurasi penolakan", "refusal_accuracy", "pct"),
+        ("Penolakan salah", "false_refusal_rate", "pct"),
+        ("Recall percakapan", "conversational_recall", "pct"),
+        ("Latensi rata-rata", "avg_latency_ms", "ms"),
+    ]
+
+    print(f"\n{'=' * 74}")
+    print("📋 PERBANDINGAN KONFIGURASI")
+    print(f"{'=' * 74}")
+
+    header = f"  {'Metrik':<22}" + "".join(f"{name:>17}" for name in names)
+    print(header)
+    print(f"  {'-' * (22 + 17 * len(names))}")
+
+    for label, key, kind in rows:
+        cells = []
+        for name in names:
+            value = all_metrics[name].get(key, 0.0)
+            if kind == "pct":
+                cells.append(f"{value:>16.1%}")
+            elif kind == "ms":
+                cells.append(f"{value:>14.0f} ms")
+            else:
+                cells.append(f"{value:>16.3f}")
+        print(f"  {label:<22}" + "".join(cells))
+
+    print(f"\n  Catatan: 'Penolakan salah' dan 'Latensi' makin kecil makin baik.")
+
+
+def run_full_evaluation(
+    modes: list[str],
+    api_key: str | None = None,
+    skip_conversational: bool = False,
+    verbose: bool = True,
+) -> dict:
+    """Jalankan evaluasi untuk seluruh konfigurasi yang diminta."""
+    print("=" * 74)
+    print("🚀 EVALUASI RETRIEVAL — RAG Chatbot Kampus UAJY")
+    print("=" * 74)
+
     questions = load_test_questions()
-    retriever = DocumentRetriever()
+    if skip_conversational:
+        questions = [q for q in questions if not q.get("chat_history")]
 
-    print(f"\n📝 Total pertanyaan uji: {len(questions)}")
-    print(f"   In-scope: {len([q for q in questions if q['category'] == 'in_scope'])}")
-    print(f"   Out-of-scope: {len([q for q in questions if q['category'] == 'out_of_scope'])}")
+    retriever = HybridRetriever()
+    info = retriever.document_info
 
-    # Run evaluations
-    retrieval_metrics = evaluate_retrieval(retriever, questions, api_key)
-    refusal_metrics = evaluate_refusal(retriever, questions, api_key)
+    in_scope = [q for q in questions if q.get("category") == "in_scope"]
+    out_of_scope = [q for q in questions if q.get("category") == "out_of_scope"]
+    conversational = [q for q in questions if q.get("chat_history")]
 
-    # Summary
-    print(f"\n{'='*60}")
-    print(f"📊 RINGKASAN EVALUASI")
-    print(f"{'='*60}")
-    print(f"   Retrieval Recall@{DEFAULT_TOP_K}: {retrieval_metrics['recall_at_k']:.1%}")
-    print(f"   Refusal Accuracy:    {refusal_metrics['refusal_accuracy']:.1%}")
-    print(f"   Avg Retrieval Latency: {retrieval_metrics['avg_latency_s']:.2f}s")
+    print(f"\n📚 Index    : {info['total_chunks']} chunk · {info['total_pages']} halaman · "
+          f"maks {info['max_pages_per_chunk']} halaman/chunk "
+          f"(rata-rata {info['avg_pages_per_chunk']})")
+    print(f"   Embedding: task type {retriever.embedding_task_type or 'generik (index lama)'}")
+    print(f"📝 Pertanyaan: {len(questions)} total · {len(in_scope)} in-scope · "
+          f"{len(out_of_scope)} out-of-scope · {len(conversational)} percakapan lanjutan")
 
-    # Criteria check
-    print(f"\n{'─'*60}")
-    recall_pass = retrieval_metrics['recall_at_k'] >= 0.80
-    refusal_pass = refusal_metrics['refusal_accuracy'] >= 1.0
-    print(f"   {'✅' if recall_pass else '❌'} Recall@4 ≥ 80%: {retrieval_metrics['recall_at_k']:.1%}")
-    print(f"   {'✅' if refusal_pass else '❌'} Refusal = 100%: {refusal_metrics['refusal_accuracy']:.1%}")
-    print(f"{'─'*60}")
+    all_results: dict[str, list[dict]] = {}
+    all_metrics: dict[str, dict] = {}
 
-    all_metrics = {
-        "retrieval": retrieval_metrics,
-        "refusal": refusal_metrics,
+    for mode in modes:
+        config = ABLATION_PRESETS[mode]
+        # Pertanyaan percakapan butuh penulisan ulang agar bermakna; tanpa itu
+        # yang terukur bukan lagi kemampuan pipeline melainkan keberuntungan.
+        if conversational and not config.use_query_rewrite:
+            config = config.with_overrides(use_query_rewrite=True)
+
+        results, metrics = evaluate_preset(
+            retriever, questions, config, mode, api_key=api_key, verbose=verbose
+        )
+        all_results[mode] = [r.to_dict() for r in results]
+        all_metrics[mode] = metrics
+
+    print_comparison(all_metrics)
+
+    payload = {
+        "index": {
+            "total_chunks": info["total_chunks"],
+            "total_pages": info["total_pages"],
+            "max_pages_per_chunk": info["max_pages_per_chunk"],
+            "avg_pages_per_chunk": info["avg_pages_per_chunk"],
+            "embedding_task_type": retriever.embedding_task_type,
+        },
+        "questions": {
+            "total": len(questions),
+            "in_scope": len(in_scope),
+            "out_of_scope": len(out_of_scope),
+            "conversational": len(conversational),
+        },
+        "metrics": all_metrics,
+        "results": all_results,
     }
 
-    # Save results
-    results_path = Path(__file__).resolve().parent / "eval_results.json"
-    with open(results_path, "w", encoding="utf-8") as f:
-        json.dump(all_metrics, f, indent=2)
-    print(f"\n💾 Hasil disimpan ke: {results_path}")
+    with open(RESULTS_PATH, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    print(f"\n💾 Hasil lengkap disimpan ke: {RESULTS_PATH}")
 
-    return all_metrics
+    return payload
+
+
+def main() -> None:
+    enable_utf8_stdout()
+
+    parser = argparse.ArgumentParser(description="Evaluasi retrieval RAG Chatbot Kampus")
+    parser.add_argument(
+        "--mode",
+        action="append",
+        choices=list(ABLATION_PRESETS),
+        help="Konfigurasi yang diuji. Bisa diulang. Default: semuanya.",
+    )
+    parser.add_argument("--api-key", type=str, default=None, help="Google Gemini API key")
+    parser.add_argument(
+        "--skip-conversational",
+        action="store_true",
+        help="Lewati pertanyaan lanjutan berbasis riwayat chat",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Hanya cetak ringkasan, tanpa rincian per pertanyaan",
+    )
+    args = parser.parse_args()
+
+    modes = args.mode or PRESET_ORDER
+
+    from app.llm_client import LLMConfigError, resolve_api_key
+
+    try:
+        resolve_api_key(args.api_key)
+    except LLMConfigError as e:
+        print(f"❌ {e}")
+        sys.exit(1)
+
+    try:
+        run_full_evaluation(
+            modes=modes,
+            api_key=args.api_key,
+            skip_conversational=args.skip_conversational,
+            verbose=not args.quiet,
+        )
+    except FileNotFoundError as e:
+        print(f"❌ {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluasi RAG Chatbot Kampus")
-    parser.add_argument("--api-key", type=str, default=None, help="Google Gemini API key")
-    args = parser.parse_args()
-
-    api_key = args.api_key
-    if not api_key:
-        secrets_path = Path(__file__).resolve().parent.parent / ".streamlit" / "secrets.toml"
-        if secrets_path.exists():
-            import tomllib
-            with open(secrets_path, "rb") as f:
-                secrets = tomllib.load(f)
-            api_key = secrets.get("GEMINI_API_KEY")
-
-    if not api_key or api_key == "MASUKKAN_API_KEY_GEMINI_ANDA_DI_SINI":
-        print("❌ API key belum diatur!")
-        sys.exit(1)
-
-    run_full_evaluation(api_key)
+    main()
