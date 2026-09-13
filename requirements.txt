@@ -1,4 +1,5 @@
-streamlit>=1.30.0
+streamlit>=1.32.0
+pandas>=2.0.0
 pdfplumber>=0.10.0
 faiss-cpu>=1.7.4
 google-genai>=1.0.0

@@ -15,9 +15,16 @@ import streamlit as st
 # Tambahkan root project ke sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.llm_client import call_llm, get_query_embedding, LLM_MODEL, EMBEDDING_MODEL
+from app.config import (
+    DEFAULT_RETRIEVAL_CONFIG,
+    EMBEDDING_MODEL,
+    LLM_MODEL,
+    UTILITY_MODEL,
+    RetrievalConfig,
+)
+from app.llm_client import LLMConfigError, call_llm
 from app.prompt_builder import build_no_context_response, build_prompt
-from app.retrieval import DocumentRetriever, RetrievalResult, format_sources
+from app.retrieval import DocumentRetriever, RetrievalOutcome, format_sources
 
 # ──────────────────────────────────────────────
 # Page Config
@@ -346,6 +353,99 @@ def load_test_questions() -> list[dict]:
         return json.load(f)
 
 
+# ──────────────────────────────────────────────
+# Panel Debug Retrieval
+# ──────────────────────────────────────────────
+
+def outcome_to_debug(outcome: RetrievalOutcome) -> dict:
+    """
+    Ringkas hasil retrieval menjadi data yang bisa disimpan di riwayat chat.
+
+    `RetrievalOutcome` memuat objek yang tidak ramah untuk disimpan di
+    session state, jadi hanya angka dan teks yang diambil. Dengan begini
+    panel debug tetap bisa dirender ulang setiap kali Streamlit menjalankan
+    skrip dari awal.
+    """
+    used = {candidate.chunk_index for candidate in outcome.contexts}
+
+    rows = []
+    for candidate in outcome.candidates:
+        rows.append({
+            "Dipakai": "✅" if candidate.chunk_index in used else "",
+            "Chunk": candidate.chunk_index,
+            "Halaman": candidate.page_label,
+            "Bagian": candidate.heading_label or "-",
+            "Ditemukan oleh": candidate.retrieved_by,
+            "Dense (cosine)": round(candidate.dense_score, 3),
+            "BM25": round(candidate.lexical_score, 2),
+            "RRF": round(candidate.fusion_score, 5),
+            "Rerank (0-10)": (
+                round(candidate.rerank_score, 1)
+                if candidate.rerank_score is not None else None
+            ),
+            "Cakupan istilah": f"{candidate.lexical_coverage:.0%}",
+            "Istilah cocok": ", ".join(candidate.matched_terms) or "-",
+        })
+
+    return {
+        "rows": rows,
+        "gate": dict(outcome.gate),
+        "timings_ms": dict(outcome.timings_ms),
+        "effective_query": outcome.effective_query,
+        "was_rewritten": outcome.was_rewritten,
+        "refused": outcome.refused,
+        "refusal_reason": outcome.refusal_reason,
+    }
+
+
+def render_retrieval_debug(debug: dict) -> None:
+    """Tampilkan rincian skor tiap tahap pipeline retrieval."""
+    if not debug:
+        return
+
+    rows = debug.get("rows") or []
+    label = f"🔬 Rincian retrieval ({len(rows)} kandidat)"
+
+    with st.expander(label, expanded=False):
+        timings = debug.get("timings_ms") or {}
+        if timings:
+            stage_names = {
+                "rewrite_ms": "Query rewriting",
+                "dense_ms": "Dense (embed + FAISS)",
+                "lexical_ms": "BM25",
+                "fusion_ms": "Fusi RRF",
+                "rerank_ms": "Reranker LLM",
+            }
+            cols = st.columns(len(timings) + 1)
+            for col, (key, value) in zip(cols, timings.items()):
+                col.metric(stage_names.get(key, key), f"{value:.0f} ms")
+            cols[-1].metric("Total", f"{sum(timings.values()):.0f} ms")
+
+        gate = debug.get("gate") or {}
+        if gate:
+            st.caption(
+                "**Gate relevansi** — "
+                f"kemiripan tertinggi {gate.get('max_dense_score', 0):.3f} "
+                f"(ambang {gate.get('dense_threshold', 0):.2f}) · "
+                f"cakupan istilah tertinggi {gate.get('max_lexical_coverage', 0):.0%} "
+                f"(ambang {gate.get('lexical_coverage_threshold', 0):.0%}) · "
+                f"jalur dense {'lolos' if gate.get('dense_pass') else 'gagal'}, "
+                f"jalur leksikal {'lolos' if gate.get('lexical_pass') else 'gagal'}"
+                + (
+                    f", reranker {'lolos' if gate.get('rerank_pass') else 'menolak'}"
+                    if "rerank_pass" in gate else ""
+                )
+            )
+
+        if debug.get("refused"):
+            st.warning(f"Ditolak: {debug.get('refusal_reason', '-')}")
+
+        if rows:
+            st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        else:
+            st.info("Tidak ada kandidat yang ditemukan pada kedua jalur pencarian.")
+
+
 def render_hero() -> None:
     st.markdown(
         """
@@ -365,7 +465,7 @@ def render_hero() -> None:
 # View 1: Tanya Jawab (Chatbot)
 # ──────────────────────────────────────────────
 
-def render_chat_view(retriever: DocumentRetriever | None, top_k: int, threshold: float) -> None:
+def render_chat_view(retriever: DocumentRetriever | None, config: RetrievalConfig) -> None:
     st.header("Tanya Jawab Akademik")
     st.markdown(
         '<p class="section-lead">Ajukan pertanyaan dalam Bahasa Indonesia seputar ketentuan akademik, SKS, skripsi, cuti, atau yudisium.</p>',
@@ -407,11 +507,14 @@ def render_chat_view(retriever: DocumentRetriever | None, top_k: int, threshold:
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"], avatar="🧑‍🎓" if msg["role"] == "user" else "🎓"):
             st.markdown(msg["content"])
-            if msg["role"] == "assistant" and "sources" in msg and msg["sources"]:
-                st.markdown(
-                    f'<div class="source-box"><strong>📚 Sumber Referensi:</strong><br>{msg["sources"]}</div>',
-                    unsafe_allow_html=True,
-                )
+            if msg["role"] == "assistant":
+                if msg.get("sources"):
+                    st.markdown(
+                        f'<div class="source-box"><strong>📚 Sumber Referensi:</strong><br>{msg["sources"]}</div>',
+                        unsafe_allow_html=True,
+                    )
+                if msg.get("debug"):
+                    render_retrieval_debug(msg["debug"])
 
     # Process queued query from preset if any
     input_query = None
@@ -422,49 +525,84 @@ def render_chat_view(retriever: DocumentRetriever | None, top_k: int, threshold:
     query = input_query or chat_input
 
     if query:
-        _handle_query(query, retriever, top_k, threshold)
+        _handle_query(query, retriever, config)
 
 
-def _handle_query(query: str, retriever: DocumentRetriever, top_k: int, threshold: float) -> None:
+def _handle_query(query: str, retriever: DocumentRetriever, config: RetrievalConfig) -> None:
     st.session_state.messages.append({"role": "user", "content": query})
     with st.chat_message("user", avatar="🧑‍🎓"):
         st.markdown(query)
 
+    # Riwayat tanpa pertanyaan yang baru saja ditambahkan.
+    chat_history = [
+        {"role": m["role"], "content": m["content"]}
+        for m in st.session_state.messages[:-1]
+    ]
+
     with st.chat_message("assistant", avatar="🎓"):
-        with st.spinner("Mencari potongan dokumen yang relevan..."):
-            query_embedding = get_query_embedding(query)
-            results = retriever.search(
-                query_embedding=query_embedding,
-                top_k=top_k,
-                threshold=threshold,
+        spinner_text = (
+            "Menulis ulang pertanyaan lalu mencari dokumen..."
+            if config.use_query_rewrite and chat_history
+            else "Mencari potongan dokumen yang relevan..."
+        )
+
+        try:
+            with st.spinner(spinner_text):
+                outcome = retriever.retrieve(
+                    query,
+                    config=config,
+                    chat_history=chat_history,
+                )
+        except LLMConfigError as e:
+            st.error(f"⚠️ {e}")
+            st.session_state.messages.pop()
+            return
+        except Exception as e:
+            st.error(f"⚠️ Gagal melakukan pencarian: {e}")
+            st.session_state.messages.pop()
+            return
+
+        debug = outcome_to_debug(outcome)
+
+        if outcome.was_rewritten:
+            st.caption(
+                f"🔁 Pertanyaan ditulis ulang untuk pencarian: "
+                f"*{outcome.effective_query}*"
             )
 
-        if not results:
+        if outcome.refused:
             response = build_no_context_response()
             st.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
+            render_retrieval_debug(debug)
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": response,
+                "debug": debug,
+            })
             return
 
         with st.spinner("Menyusun jawaban dari dokumen..."):
-            chat_history = [
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages[:-1]
-            ]
-            system_prompt, user_prompt = build_prompt(query, results, chat_history)
+            system_prompt, user_prompt = build_prompt(
+                outcome.original_query, outcome.contexts, chat_history
+            )
             response = call_llm(user_prompt, system_instruction=system_prompt)
 
         st.markdown(response)
-        sources_text = format_sources(results)
+
+        sources_text = format_sources(outcome.contexts)
         if sources_text:
             st.markdown(
                 f'<div class="source-box"><strong>📚 Sumber Referensi:</strong><br>{sources_text}</div>',
                 unsafe_allow_html=True,
             )
 
+        render_retrieval_debug(debug)
+
         st.session_state.messages.append({
             "role": "assistant",
             "content": response,
             "sources": sources_text,
+            "debug": debug,
         })
 
 
@@ -490,31 +628,62 @@ def render_document_explorer(retriever: DocumentRetriever | None) -> None:
     col1.metric("Total Chunk", f"{info.get('total_chunks', 0):,}")
     col2.metric("Total Halaman", f"{info.get('total_pages', 0)}")
     col3.metric("Rentang Halaman", f"Hal {info.get('page_range', '-')}")
-    col4.metric("Model Embedding", EMBEDDING_MODEL)
+    col4.metric(
+        "Halaman per Chunk",
+        f"{info.get('avg_pages_per_chunk', 0)} rata-rata",
+        help="Semakin dekat ke 1, semakin presisi sitasi halaman yang bisa "
+             "diberikan chatbot. Nilai maksimum saat ini: "
+             f"{info.get('max_pages_per_chunk', 0)} halaman.",
+    )
+
+    lexical = info.get("lexical") or {}
+    if lexical:
+        st.caption(
+            f"**Index leksikal BM25** — {lexical.get('documents', 0)} dokumen · "
+            f"{lexical.get('vocabulary', 0):,} istilah unik · "
+            f"rata-rata {lexical.get('avg_tokens_per_doc', 0)} token per chunk · "
+            f"k1={lexical.get('k1')}, b={lexical.get('b')}. "
+            "Dibangun di memori saat aplikasi dimuat, jadi tidak ada artefak "
+            "tambahan yang perlu disimpan."
+        )
 
     st.subheader("Pencarian Isi Dokumen")
-    search_term = st.text_input("Filter teks chunk", placeholder="Contoh: skripsi, cuti, kurikulum, predikat...")
+    search_term = st.text_input(
+        "Filter teks chunk",
+        placeholder="Contoh: skripsi, cuti, kurikulum, predikat...",
+    )
 
     display_df = df.copy()
     if search_term and not display_df.empty:
-        display_df = display_df[
-            display_df["text"].str.contains(search_term, case=False, na=False) |
-            display_df["section_title"].str.contains(search_term, case=False, na=False)
-        ]
+        haystack = display_df["text"].fillna("")
+        if "section_title" in display_df.columns:
+            haystack = haystack + " " + display_df["section_title"].fillna("")
+        display_df = display_df[haystack.str.contains(search_term, case=False, na=False)]
 
     if not display_df.empty:
-        st.caption(f"Menampilkan {len(display_df)} dari {len(df)} chunk")
+        st.caption(f"Menampilkan {min(len(display_df), 50)} dari {len(display_df)} chunk yang cocok")
         table_data = []
         for _, row in display_df.head(50).iterrows():
-            pages = ", ".join(str(p) for p in row.get("page_numbers", []))
+            pages = row.get("page_numbers") or []
+            page_label = "-"
+            if len(pages):
+                first, last = min(pages), max(pages)
+                page_label = str(first) if first == last else f"{first}-{last}"
+
+            heading_path = row.get("heading_path")
+            if isinstance(heading_path, list) and heading_path:
+                heading = " › ".join(heading_path)
+            else:
+                heading = row.get("section_title") or "-"
+
             table_data.append({
                 "Index": row.get("chunk_index"),
-                "Halaman": f"Hal. {pages}",
-                "Bagian / Judul": row.get("section_title", "-") or "-",
+                "Halaman": page_label,
+                "Bagian / Judul": heading,
                 "Karakter": row.get("char_count"),
-                "Cuplikan Teks": row.get("text", "")[:140] + "...",
+                "Cuplikan Teks": (row.get("text") or "")[:140] + "...",
             })
-        st.dataframe(pd.DataFrame(table_data), hide_index=True)
+        st.dataframe(pd.DataFrame(table_data), hide_index=True, width="stretch")
     else:
         st.info("Tidak ada chunk yang cocok dengan filter pencarian.")
 
@@ -587,23 +756,79 @@ def render_about(retriever: DocumentRetriever | None) -> None:
         """
     )
 
+    st.subheader("Pipeline Retrieval")
+    st.markdown(
+        """
+        Setiap pertanyaan melewati tahapan berikut:
+
+        1. **Query rewriting** — pertanyaan lanjutan seperti *"berapa syaratnya?"* diubah
+           menjadi pertanyaan mandiri berdasarkan riwayat percakapan, **sebelum** pencarian
+           berjalan. Tanpa langkah ini, konteks yang salah sudah terambil sejak awal.
+        2. **Pencarian dua jalur** — *dense* (embedding Gemini + FAISS cosine) menangkap
+           kesamaan makna, *BM25 Okapi* menangkap kecocokan istilah eksak seperti
+           "IPK 3,50", "144 SKS", atau "Pasal 12".
+        3. **Reciprocal Rank Fusion** — kedua peringkat digabung memakai peringkat, bukan
+           skor mentah, sehingga cosine (0–1) dan BM25 (tak terbatas) bisa disatukan tanpa
+           normalisasi.
+        4. **Reranking** — model menilai ulang setiap kandidat dengan melihat pertanyaan dan
+           potongan dokumen bersamaan, menilai *kemampuan menjawab* alih-alih sekadar
+           kemiripan.
+        5. **Gate relevansi berlapis** — ambang kemiripan, cakupan istilah, skor reranker,
+           lalu instruksi sistem yang ketat. Pertanyaan di luar cakupan ditolak, bukan
+           dijawab dengan karangan.
+        """
+    )
+
     st.subheader("Detail Konfigurasi & Stack")
     info = retriever.document_info if retriever else {}
-    details = pd.DataFrame(
-        [
-            ("Institusi", "Universitas Atma Jaya Yogyakarta (UAJY)"),
-            ("Fakultas / Dokumen", "Buku Pedoman Akademik FTI 2025-2026"),
-            ("Model LLM Generation", f"Google {LLM_MODEL} (via API)"),
-            ("Model Embedding", f"Google {EMBEDDING_MODEL} (Dimensi 3072)"),
-            ("Vector Store", "FAISS (IndexFlatIP / Cosine Similarity)"),
-            ("Total Chunk Terindex", f"{info.get('total_chunks', 0)} chunk"),
-            ("Total Halaman Sumber", f"{info.get('total_pages', 0)} halaman"),
-            ("Framework UI", "Streamlit"),
-            ("Guardrail Halusinasi", "Similarity Threshold Filtering + Strict System Prompt"),
-        ],
-        columns=["Komponen", "Spesifikasi / Nilai"],
+    index_info = info.get("index_info") or {}
+    embedding_info = index_info.get("embedding") or {}
+    source_info = index_info.get("source_pdf") or {}
+    lexical = info.get("lexical") or {}
+
+    dimension = embedding_info.get("dimension")
+    embedding_label = f"Google {EMBEDDING_MODEL}"
+    if dimension:
+        embedding_label += f" (dimensi {dimension})"
+
+    rows = [
+        ("Institusi", "Universitas Atma Jaya Yogyakarta (UAJY)"),
+        ("Dokumen Sumber", source_info.get("name", "Buku Pedoman Akademik FTI 2025-2026")),
+        ("Model LLM Generation", f"Google {LLM_MODEL} (via API)"),
+        ("Model Rerank & Rewrite", f"Google {UTILITY_MODEL} (via API)"),
+        ("Model Embedding", embedding_label),
+        ("Task Type Embedding", embedding_info.get("task_type") or "generik (index lama)"),
+        ("Vector Store", "FAISS IndexFlatIP (cosine similarity)"),
+        ("Index Leksikal", f"BM25 Okapi in-memory, {lexical.get('vocabulary', 0):,} istilah unik"),
+        ("Total Chunk Terindex", f"{info.get('total_chunks', 0)} chunk"),
+        ("Total Halaman Sumber", f"{info.get('total_pages', 0)} halaman"),
+        (
+            "Presisi Sitasi Halaman",
+            f"rata-rata {info.get('avg_pages_per_chunk', 0)} halaman per chunk "
+            f"(maksimum {info.get('max_pages_per_chunk', 0)})",
+        ),
+        ("Framework UI", "Streamlit"),
+        (
+            "Guardrail Halusinasi",
+            "Ambang kemiripan + cakupan istilah leksikal + gate reranker + system prompt ketat",
+        ),
+    ]
+
+    if index_info.get("built_at"):
+        rows.append(("Index Dibangun", index_info["built_at"]))
+
+    st.dataframe(
+        pd.DataFrame(rows, columns=["Komponen", "Spesifikasi / Nilai"]),
+        hide_index=True,
+        width="stretch",
     )
-    st.dataframe(details, hide_index=True)
+
+    if not index_info:
+        st.info(
+            "Index ini dibangun sebelum pencatatan `index_info.json` ada. "
+            "Jalankan `python ingestion/build_index.py --yes` untuk membangun ulang "
+            "dengan chunking presisi halaman dan embedding yang menyertakan judul bagian."
+        )
 
 
 # ──────────────────────────────────────────────
@@ -632,7 +857,8 @@ def main() -> None:
             st.markdown(
                 '<div class="result-box" style="padding: 10px 14px; margin: 0 0 14px 0;">'
                 '<div class="result-label" style="font-size: 0.72rem; color: #5eead4;">Status Vector Store</div>'
-                '<div style="font-weight: 700; color: #1fb4b6; font-size: 0.95rem;">● Index Aktif (350 Chunk)</div>'
+                '<div style="font-weight: 700; color: #1fb4b6; font-size: 0.95rem;">'
+                f'● Index Aktif ({retriever.total_chunks} Chunk)</div>'
                 '</div>',
                 unsafe_allow_html=True,
             )
@@ -646,20 +872,60 @@ def main() -> None:
             )
 
         # Settings
+        st.markdown("##### 🔀 Pipeline Retrieval")
+        use_hybrid = st.toggle(
+            "Hybrid search (BM25 + dense)",
+            value=DEFAULT_RETRIEVAL_CONFIG.use_hybrid,
+            help="Menggabungkan pencarian makna (embedding) dengan pencocokan "
+                 "istilah eksak (BM25) memakai Reciprocal Rank Fusion. Membantu "
+                 "pertanyaan yang memuat angka atau nomor pasal.",
+        )
+        use_rerank = st.toggle(
+            "Reranker LLM",
+            value=DEFAULT_RETRIEVAL_CONFIG.use_rerank,
+            help="Menilai ulang kandidat dengan melihat pertanyaan dan potongan "
+                 "dokumen bersamaan. Menambah satu panggilan API per pertanyaan, "
+                 "tetapi menaikkan presisi dan memperkuat penolakan pertanyaan "
+                 "di luar cakupan.",
+        )
+        use_rewrite = st.toggle(
+            "Query rewriting",
+            value=DEFAULT_RETRIEVAL_CONFIG.use_query_rewrite,
+            help="Mengubah pertanyaan lanjutan menjadi pertanyaan mandiri sebelum "
+                 "pencarian. Hanya aktif bila pertanyaan terdeteksi bergantung pada "
+                 "riwayat percakapan.",
+        )
+
         st.markdown("##### ⚙️ Parameter Retrieval")
-        top_k = st.slider("Top-K Konteks", min_value=1, max_value=8, value=4, help="Jumlah chunk yang diambil per query")
-        threshold = st.slider("Ambang Relevansi", min_value=0.1, max_value=0.8, value=0.30, step=0.05, help="Skor similarity minimum")
+        top_k = st.slider(
+            "Top-K Konteks", min_value=1, max_value=8,
+            value=DEFAULT_RETRIEVAL_CONFIG.top_k,
+            help="Jumlah chunk yang dikirim ke LLM sebagai konteks",
+        )
+        threshold = st.slider(
+            "Ambang Relevansi", min_value=0.1, max_value=0.8,
+            value=DEFAULT_RETRIEVAL_CONFIG.dense_threshold, step=0.05,
+            help="Cosine similarity minimum agar jalur dense dianggap menemukan konteks",
+        )
+
+        config = DEFAULT_RETRIEVAL_CONFIG.with_overrides(
+            top_k=top_k,
+            dense_threshold=threshold,
+            use_hybrid=use_hybrid,
+            use_rerank=use_rerank,
+            use_query_rewrite=use_rewrite,
+        )
 
         st.divider()
         if st.button("🗑️ Bersihkan Percakapan"):
             st.session_state.messages = []
             st.rerun()
 
-        st.caption(f"Model: {LLM_MODEL}")
+        st.caption(f"Jawaban: {LLM_MODEL} · Rerank/rewrite: {UTILITY_MODEL}")
 
     # Render Active Page
     if page == "Tanya Jawab":
-        render_chat_view(retriever, top_k, threshold)
+        render_chat_view(retriever, config)
     elif page == "Jelajah Dokumen":
         render_document_explorer(retriever)
     elif page == "Uji Pertanyaan":

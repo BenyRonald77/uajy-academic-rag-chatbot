@@ -1,27 +1,96 @@
 """
-chunking.py — Membagi teks dokumen menjadi chunk-chunk yang bermakna.
+chunking.py — Membagi teks dokumen menjadi chunk yang bermakna, dengan
+nomor halaman yang presisi.
 
-Strategi chunking:
-1. Coba split berdasarkan section heading terlebih dahulu.
-2. Jika section terlalu panjang, split berdasarkan paragraf.
-3. Jika paragraf masih terlalu panjang, split berdasarkan kalimat
-   dengan overlap untuk menjaga konteks.
+Tiga masalah yang diperbaiki dibanding versi awal:
+
+1. **Nomor halaman kabur.** Versi sebelumnya mengumpulkan seluruh halaman
+   sebuah section, lalu memberikan daftar halaman yang sama itu ke SEMUA
+   chunk di dalamnya. Sebuah section yang membentang 13 halaman membuat
+   setiap chunk-nya mengklaim "halaman 80-92", padahal isinya hanya satu
+   halaman. Sitasi yang tidak presisi merusak nilai utama chatbot ini.
+   Sekarang nomor halaman dilacak per baris, sehingga sebuah chunk hanya
+   mengklaim halaman yang benar-benar menjadi sumber teksnya.
+
+2. **Batas paragraf tidak pernah terdeteksi.** `extract_text` membuang semua
+   baris kosong, jadi pemisahan berbasis `\\n\\n` selalu gagal dan seluruh
+   section terpaksa dipotong per kalimat. Modul ini merekonstruksi batas
+   paragraf dari sinyal tata letak (panjang baris, tanda baca akhir, penanda
+   daftar) dan menyambung kembali baris yang terpotong akibat pembungkusan
+   PDF.
+
+3. **Judul bagian hilang dari teks chunk.** Baris heading dulu dipakai
+   sebagai judul saja lalu dibuang dari isi. Akibatnya embedding chunk
+   kehilangan sinyal semantik terkuatnya. Sekarang heading disimpan sebagai
+   hierarki (`heading_path`) dan disertakan pada teks yang diembed.
 """
 
+from __future__ import annotations
+
 import re
-from dataclasses import dataclass, field, asdict
+import statistics
+from dataclasses import asdict, dataclass, field
+
+from app.config import CHUNK_OVERLAP, CHUNK_SIZE, MIN_CHUNK_SIZE
+from app.text_utils import INDONESIAN_STOPWORDS
+
+#: Batas atas jumlah halaman yang boleh diklaim satu chunk. Pengaman untuk
+#: halaman yang teksnya sangat sedikit (halaman tabel, halaman pembatas bab):
+#: tanpa batas ini satu chunk bisa menelan banyak halaman sekaligus dan
+#: sitasinya kembali kabur.
+MAX_PAGES_PER_CHUNK = 3
+
+#: Chunk yang lebih kecil dari porsi ini masih boleh digabung dengan bagian
+#: berjudul berbeda, supaya "Pasal" yang sangat pendek tidak berdiri sendiri
+#: sebagai chunk kerdil.
+SMALL_CHUNK_MERGE_RATIO = 0.4
+
+#: Ambang penyaring noise tingkat chunk. Prosa Bahasa Indonesia yang wajar
+#: selalu memuat kata fungsi ("dan", "yang", "untuk"), sedangkan sisa teks
+#: rusak hasil rotasi PDF tidak pernah memuatnya. Tabel memang minim kata
+#: fungsi, karena itu chunk berangka atau bertanda baca tetap diloloskan.
+NOISE_MAX_STOPWORD_RATIO = 0.02
+NOISE_MAX_DIGIT_RATIO = 0.08
+
+
+# ──────────────────────────────────────────────
+# Deteksi heading
+# ──────────────────────────────────────────────
+
+#: Pola heading beserta level hierarkinya. Level kecil berarti lebih tinggi.
+#: Heading "struktural" (BAB/BAGIAN/LAMPIRAN) diberi tanda karena judulnya
+#: sering terbelah ke baris berikutnya.
+_HEADING_PATTERNS: list[tuple[int, bool, re.Pattern]] = [
+    (0, True, re.compile(r"^(?:BAB|Bab|BAGIAN|Bagian)\s+[IVXLCDM\d]+\b")),
+    (0, True, re.compile(r"^(?:LAMPIRAN|Lampiran)\b")),
+    (1, False, re.compile(r"^(?:PASAL|Pasal)\s+\d+\b")),
+    (2, False, re.compile(r"^\d+\.\d+(?:\.\d+)?\s+\S")),
+    (2, False, re.compile(r"^[A-Z]\.\s+[A-Z]")),
+]
+
+#: Baris huruf kapital semua dianggap judul. Dipakai terpisah karena sering
+#: menjadi kelanjutan judul BAB pada baris sebelumnya ("BAB I" lalu
+#: "PENDAHULUAN"), bukan heading baru.
+_ALL_CAPS_RE = re.compile(r"^[A-Z][A-Z\s\-–—/&(),.']{5,}$")
+
+#: Penanda awal butir daftar.
+_BULLET_RE = re.compile(r"^(?:[-•*▪o]\s+|\(?\d{1,2}[.)]\s+|[a-z][.)]\s+)")
+
+#: Tanda baca yang menandai akhir kalimat/paragraf.
+_SENTENCE_END = (".", "!", "?", ":", ";")
+
+_MAX_HEADING_LENGTH = 120
 
 
 @dataclass
 class Chunk:
-    """Representasi satu chunk teks dengan metadata."""
+    """Satu chunk teks beserta metadata sumbernya."""
+
     text: str
     page_numbers: list[int] = field(default_factory=list)
     section_title: str = ""
+    heading_path: list[str] = field(default_factory=list)
     chunk_index: int = 0
-
-    def to_dict(self) -> dict:
-        return asdict(self)
 
     @property
     def char_count(self) -> int:
@@ -29,256 +98,580 @@ class Chunk:
 
     @property
     def estimated_tokens(self) -> int:
-        """Estimasi kasar jumlah token (1 token ≈ 4 karakter untuk bahasa Indonesia)."""
+        """Estimasi kasar jumlah token (1 token ≈ 4 karakter untuk Bahasa Indonesia)."""
         return len(self.text) // 4
 
+    @property
+    def page_start(self) -> int | None:
+        return min(self.page_numbers) if self.page_numbers else None
+
+    @property
+    def page_end(self) -> int | None:
+        return max(self.page_numbers) if self.page_numbers else None
+
+    @property
+    def page_label(self) -> str:
+        """Rentang halaman ringkas, mis. "12" atau "12-14"."""
+        if not self.page_numbers:
+            return "-"
+        start, end = self.page_start, self.page_end
+        return str(start) if start == end else f"{start}-{end}"
+
+    @property
+    def embed_text(self) -> str:
+        """
+        Teks yang dikirim ke model embedding.
+
+        Heading path disisipkan di depan isi supaya vektor chunk membawa
+        konteks bagiannya. Tanpa ini, potongan di tengah "BAB IV Kurikulum"
+        tidak punya petunjuk apa pun bahwa ia membahas kurikulum.
+        """
+        if not self.heading_path:
+            return self.text
+        return f"{' > '.join(self.heading_path)}\n\n{self.text}"
+
+    def to_dict(self) -> dict:
+        data = asdict(self)
+        data.update({
+            "char_count": self.char_count,
+            "estimated_tokens": self.estimated_tokens,
+            "page_start": self.page_start,
+            "page_end": self.page_end,
+        })
+        return data
+
+
+@dataclass
+class _Line:
+    """Satu baris teks beserta halaman asalnya."""
+
+    page: int
+    text: str
+
+
+@dataclass
+class _Block:
+    """
+    Satu paragraf (atau butir daftar) hasil rekonstruksi tata letak.
+
+    Menyimpan baris penyusunnya, bukan hanya teks gabungan, supaya blok yang
+    kelewat panjang bisa dipecah tanpa kehilangan ketepatan nomor halaman.
+    """
+
+    lines: list[_Line]
+    heading_path: tuple[str, ...] = ()
+
+    @property
+    def text(self) -> str:
+        return _join_lines([line.text for line in self.lines])
+
+    @property
+    def pages(self) -> list[int]:
+        return sorted({line.page for line in self.lines})
+
+    @property
+    def char_count(self) -> int:
+        return len(self.text)
+
 
 # ──────────────────────────────────────────────
-# Konfigurasi default
+# Penyambungan baris
 # ──────────────────────────────────────────────
 
-DEFAULT_CHUNK_SIZE = 1500       # karakter (~375 token)
-DEFAULT_CHUNK_OVERLAP = 300     # karakter (~75 token)
-MIN_CHUNK_SIZE = 100            # minimum karakter agar chunk bermakna
-
-# Pattern untuk mendeteksi heading/section
-HEADING_PATTERNS = [
-    r"^(?:BAB|Bab|BAGIAN|Bagian)\s+[IVXLCDM\d]+",     # BAB I, Bagian 2
-    r"^(?:Pasal|PASAL)\s+\d+",                          # Pasal 1
-    r"^\d+\.\d*\s+[A-Z]",                               # 1. Pendahuluan, 1.1 Sub
-    r"^[A-Z][A-Z\s]{5,}$",                              # JUDUL DENGAN HURUF KAPITAL
-    r"^(?:Lampiran|LAMPIRAN)\s*",                        # Lampiran
-]
-
-
-def chunk_pages(
-    pages: list[tuple[int, str]],
-    chunk_size: int = DEFAULT_CHUNK_SIZE,
-    chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
-) -> list[Chunk]:
+def _join_lines(lines: list[str]) -> str:
     """
-    Bagi halaman-halaman teks menjadi chunk-chunk.
+    Sambung baris yang terpotong akibat pembungkusan PDF menjadi teks utuh.
 
-    Args:
-        pages: List of (page_number, text) dari extract_text.
-        chunk_size: Maksimum karakter per chunk.
-        chunk_overlap: Jumlah karakter overlap antar chunk.
+    Kata yang terpotong tanda hubung di akhir baris ("univer-\\nsitas")
+    disatukan kembali tanpa spasi.
+    """
+    if not lines:
+        return ""
+
+    result = lines[0].strip()
+    for raw in lines[1:]:
+        line = raw.strip()
+        if not line:
+            continue
+        if result.endswith("-") and line[:1].islower():
+            result = result[:-1] + line
+        else:
+            result = f"{result} {line}"
+    return result
+
+
+def _detect_heading(line: str) -> tuple[int, str, bool] | None:
+    """
+    Deteksi heading pada sebuah baris.
 
     Returns:
-        List of Chunk objects.
+        ``(level, judul, is_structural)`` bila baris merupakan heading, atau
+        ``None``. Level 0 adalah yang tertinggi (BAB/Lampiran).
+        ``is_structural`` menandai heading BAB/BAGIAN/LAMPIRAN, yang judulnya
+        boleh disambung dari baris huruf kapital berikutnya.
     """
-    # Gabungkan halaman menjadi sections berdasarkan heading
-    sections = _split_into_sections(pages)
-
-    # Chunk setiap section
-    all_chunks = []
-    for section in sections:
-        section_chunks = _chunk_section(
-            text=section["text"],
-            page_numbers=section["pages"],
-            section_title=section["title"],
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-        )
-        all_chunks.extend(section_chunks)
-
-    # Assign index
-    for i, chunk in enumerate(all_chunks):
-        chunk.chunk_index = i
-
-    # Filter chunk terlalu kecil
-    all_chunks = [c for c in all_chunks if c.char_count >= MIN_CHUNK_SIZE]
-
-    print(f"✅ Dihasilkan {len(all_chunks)} chunk dari {len(pages)} halaman")
-    _print_chunk_stats(all_chunks)
-
-    return all_chunks
-
-
-def _split_into_sections(pages: list[tuple[int, str]]) -> list[dict]:
-    """
-    Split halaman-halaman menjadi sections berdasarkan heading.
-
-    Returns:
-        List of {"title": str, "text": str, "pages": list[int]}
-    """
-    sections = []
-    current_section = {
-        "title": "Pendahuluan",
-        "text": "",
-        "pages": [],
-    }
-
-    for page_num, text in pages:
-        lines = text.split("\n")
-        for line in lines:
-            heading = _detect_heading(line)
-            if heading:
-                # Simpan section sebelumnya jika ada isinya
-                if current_section["text"].strip():
-                    sections.append(current_section)
-                # Mulai section baru
-                current_section = {
-                    "title": heading,
-                    "text": "",
-                    "pages": [page_num],
-                }
-            else:
-                current_section["text"] += line + "\n"
-                if page_num not in current_section["pages"]:
-                    current_section["pages"].append(page_num)
-
-    # Simpan section terakhir
-    if current_section["text"].strip():
-        sections.append(current_section)
-
-    return sections
-
-
-def _detect_heading(line: str) -> str | None:
-    """Deteksi apakah sebuah baris adalah heading/judul section."""
     stripped = line.strip()
-    if not stripped or len(stripped) < 3:
+    if len(stripped) < 3 or len(stripped) > _MAX_HEADING_LENGTH:
         return None
 
-    for pattern in HEADING_PATTERNS:
-        if re.match(pattern, stripped):
-            return stripped
+    for level, is_structural, pattern in _HEADING_PATTERNS:
+        if pattern.match(stripped):
+            return level, stripped, is_structural
+
+    if _ALL_CAPS_RE.match(stripped):
+        return 0, stripped, False
 
     return None
 
 
-def _chunk_section(
-    text: str,
-    page_numbers: list[int],
-    section_title: str,
-    chunk_size: int,
-    chunk_overlap: int,
-) -> list[Chunk]:
-    """Bagi satu section menjadi chunk-chunk dengan overlap."""
-    if len(text) <= chunk_size:
-        return [Chunk(
-            text=text.strip(),
-            page_numbers=page_numbers,
-            section_title=section_title,
-        )]
+def _starts_new_block(previous: str | None, current: str, short_line_limit: float) -> bool:
+    """
+    Tentukan apakah `current` memulai paragraf baru.
 
-    # Split berdasarkan paragraf dulu
-    paragraphs = re.split(r"\n\s*\n", text)
-    chunks = []
-    current_text = ""
+    `extract_text` sudah membuang baris kosong, jadi batas paragraf harus
+    disimpulkan dari tata letak:
 
-    for para in paragraphs:
-        para = para.strip()
-        if not para:
+    - Butir daftar selalu memulai blok baru.
+    - Baris sebelumnya diakhiri tanda baca penutup kalimat.
+    - Baris sebelumnya jauh lebih pendek dari lebar baris umumnya, yang pada
+      teks rata kanan-kiri berarti baris terakhir sebuah paragraf.
+    """
+    if previous is None:
+        return True
+
+    if _BULLET_RE.match(current):
+        return True
+
+    previous = previous.rstrip()
+    if previous.endswith(_SENTENCE_END):
+        return True
+    if len(previous) < short_line_limit:
+        return True
+
+    return False
+
+
+def _to_lines(pages: list[tuple[int, str]]) -> list[_Line]:
+    """Ratakan daftar halaman menjadi daftar baris yang membawa nomor halaman."""
+    lines: list[_Line] = []
+    for page_number, text in pages:
+        for raw in text.split("\n"):
+            stripped = raw.strip()
+            if stripped:
+                lines.append(_Line(page=page_number, text=stripped))
+    return lines
+
+
+def _short_line_limit(lines: list[_Line]) -> float:
+    """
+    Ambang "baris pendek", diturunkan dari lebar baris dokumen itu sendiri.
+
+    Dokumen berbeda punya lebar kolom berbeda, jadi angka absolut tidak
+    dapat diandalkan. Median panjang baris memberi patokan yang menyesuaikan
+    diri.
+    """
+    lengths = [len(line.text) for line in lines if len(line.text) > 20]
+    if not lengths:
+        return 40.0
+    return statistics.median(lengths) * 0.6
+
+
+def _build_blocks(lines: list[_Line]) -> list[_Block]:
+    """
+    Kelompokkan baris menjadi blok paragraf sambil melacak hierarki heading.
+
+    Heading tetap disertakan sebagai blok tersendiri agar teksnya ikut
+    terindeks, bukan sekadar menjadi label.
+    """
+    short_limit = _short_line_limit(lines)
+
+    blocks: list[_Block] = []
+    heading_stack: list[str] = []
+    current: list[_Line] = []
+    previous_text: str | None = None
+
+    #: Blok heading struktural terakhir, kandidat penyambungan judul.
+    pending_structural: _Block | None = None
+
+    def flush() -> None:
+        nonlocal current, previous_text
+        if current:
+            blocks.append(_Block(lines=current, heading_path=tuple(heading_stack)))
+            current = []
+        previous_text = None
+
+    for line in lines:
+        heading = _detect_heading(line.text)
+
+        if heading:
+            level, title, is_structural = heading
+
+            # "BAB I" pada satu baris lalu "PENDAHULUAN" pada baris berikutnya
+            # adalah satu judul yang terbelah tata letak. Sambung ke blok
+            # heading sebelumnya, jangan buat heading baru.
+            if (
+                pending_structural is not None
+                and not is_structural
+                and _ALL_CAPS_RE.match(line.text)
+                and heading_stack
+            ):
+                heading_stack[-1] = f"{heading_stack[-1]} {title}"
+                pending_structural.lines.append(line)
+                pending_structural.heading_path = tuple(heading_stack)
+                pending_structural = None
+                continue
+
+            flush()
+            del heading_stack[level:]
+            heading_stack.append(title)
+            heading_block = _Block(lines=[line], heading_path=tuple(heading_stack))
+            blocks.append(heading_block)
+            pending_structural = heading_block if is_structural else None
             continue
 
-        # Jika menambahkan paragraf ini masih muat
-        if len(current_text) + len(para) + 2 <= chunk_size:
-            current_text += para + "\n\n"
-        else:
-            # Simpan chunk saat ini
-            if current_text.strip():
-                chunks.append(Chunk(
-                    text=current_text.strip(),
-                    page_numbers=page_numbers,
-                    section_title=section_title,
-                ))
+        pending_structural = None
 
-            # Jika paragraf tunggal lebih besar dari chunk_size, split by sentence
-            if len(para) > chunk_size:
-                sentence_chunks = _split_long_text(
-                    para, page_numbers, section_title,
-                    chunk_size, chunk_overlap
-                )
-                chunks.extend(sentence_chunks)
-                current_text = ""
-            else:
-                # Overlap: ambil akhir chunk sebelumnya
-                if current_text and chunk_overlap > 0:
-                    overlap_text = current_text.strip()[-chunk_overlap:]
-                    current_text = overlap_text + "\n\n" + para + "\n\n"
-                else:
-                    current_text = para + "\n\n"
+        if _starts_new_block(previous_text, line.text, short_limit):
+            flush()
 
-    # Sisa terakhir
-    if current_text.strip():
-        chunks.append(Chunk(
-            text=current_text.strip(),
-            page_numbers=page_numbers,
-            section_title=section_title,
-        ))
+        current.append(line)
+        previous_text = line.text
 
-    return chunks
+    flush()
+    return blocks
 
 
-def _split_long_text(
-    text: str,
-    page_numbers: list[int],
-    section_title: str,
-    chunk_size: int,
-    chunk_overlap: int,
-) -> list[Chunk]:
-    """Split teks panjang berdasarkan kalimat dengan overlap."""
-    # Split by kalimat (handle tanda baca Indonesia)
-    sentences = re.split(r"(?<=[.!?;])\s+", text)
-    chunks = []
-    current_text = ""
+# ──────────────────────────────────────────────
+# Pengemasan blok menjadi chunk
+# ──────────────────────────────────────────────
+
+def _page_span(blocks: list[_Block]) -> int:
+    """Jumlah halaman berbeda yang dicakup sekumpulan blok."""
+    pages: set[int] = set()
+    for block in blocks:
+        pages.update(block.pages)
+    return len(pages)
+
+
+def _blocks_to_chunk(blocks: list[_Block]) -> Chunk | None:
+    """Gabungkan blok-blok menjadi satu Chunk."""
+    if not blocks:
+        return None
+
+    text = "\n\n".join(block.text for block in blocks if block.text.strip())
+    if not text.strip():
+        return None
+
+    pages: set[int] = set()
+    for block in blocks:
+        pages.update(block.pages)
+
+    heading_path = list(blocks[0].heading_path)
+    return Chunk(
+        text=text.strip(),
+        page_numbers=sorted(pages),
+        section_title=heading_path[-1] if heading_path else "",
+        heading_path=heading_path,
+    )
+
+
+def _split_oversized_block(block: _Block, chunk_size: int) -> list[_Block]:
+    """
+    Pecah blok yang lebih panjang dari `chunk_size`.
+
+    Pemecahan dilakukan pada batas baris, bukan karakter, sehingga setiap
+    pecahan tetap tahu halaman asalnya. Baris tunggal yang masih terlalu
+    panjang dipecah lagi per kalimat, mewarisi halaman baris induknya.
+    """
+    pieces: list[_Block] = []
+    current: list[_Line] = []
+    current_length = 0
+
+    def flush() -> None:
+        nonlocal current, current_length
+        if current:
+            pieces.append(_Block(lines=current, heading_path=block.heading_path))
+            current = []
+            current_length = 0
+
+    for line in block.lines:
+        line_length = len(line.text) + 1
+
+        if line_length > chunk_size:
+            flush()
+            for sentence in _split_line_into_sentences(line, chunk_size):
+                pieces.append(_Block(lines=[sentence], heading_path=block.heading_path))
+            continue
+
+        if current and current_length + line_length > chunk_size:
+            flush()
+
+        current.append(line)
+        current_length += line_length
+
+    flush()
+    return pieces
+
+
+def _split_line_into_sentences(line: _Line, chunk_size: int) -> list[_Line]:
+    """Pecah satu baris yang sangat panjang menjadi beberapa baris per kalimat."""
+    sentences = re.split(r"(?<=[.!?;])\s+", line.text)
+    result: list[_Line] = []
+    buffer = ""
 
     for sentence in sentences:
-        if len(current_text) + len(sentence) + 1 <= chunk_size:
-            current_text += sentence + " "
+        if buffer and len(buffer) + len(sentence) + 1 > chunk_size:
+            result.append(_Line(page=line.page, text=buffer.strip()))
+            buffer = sentence
         else:
-            if current_text.strip():
-                chunks.append(Chunk(
-                    text=current_text.strip(),
-                    page_numbers=page_numbers,
-                    section_title=section_title,
-                ))
-            # Start new chunk with overlap
-            if chunk_overlap > 0 and current_text:
-                overlap = current_text.strip()[-chunk_overlap:]
-                current_text = overlap + " " + sentence + " "
-            else:
-                current_text = sentence + " "
+            buffer = f"{buffer} {sentence}".strip()
 
-    if current_text.strip():
-        chunks.append(Chunk(
-            text=current_text.strip(),
-            page_numbers=page_numbers,
-            section_title=section_title,
-        ))
+    if buffer.strip():
+        result.append(_Line(page=line.page, text=buffer.strip()))
+
+    return result or [line]
+
+
+def _overlap_blocks(blocks: list[_Block], overlap: int) -> list[_Block]:
+    """
+    Pilih blok terakhir dari sebuah chunk untuk dibawa ke chunk berikutnya.
+
+    Overlap dilakukan pada tingkat blok, bukan potongan karakter mentah,
+    supaya teks yang dibawa tetap merupakan paragraf utuh dan halaman yang
+    diklaim chunk berikutnya tetap benar. Blok heading tidak dihitung sebagai
+    overlap karena akan tetap muncul lewat `heading_path`.
+    """
+    if overlap <= 0 or len(blocks) <= 1:
+        return []
+
+    carried: list[_Block] = []
+    total = 0
+    for block in reversed(blocks[1:]):
+        length = block.char_count
+        if total + length > overlap:
+            break
+        carried.insert(0, block)
+        total += length
+
+    return carried
+
+
+def _pack_blocks(
+    blocks: list[_Block],
+    chunk_size: int,
+    chunk_overlap: int,
+    max_pages_per_chunk: int,
+) -> list[Chunk]:
+    """
+    Susun blok menjadi chunk secara berurutan.
+
+    Sebuah chunk ditutup ketika salah satu terjadi:
+
+    - Menambah blok berikutnya melewati `chunk_size`.
+    - Menambah blok berikutnya membuat rentang halaman melewati
+      `max_pages_per_chunk` (penjaga presisi sitasi).
+    - Judul bagian berganti, kecuali chunk saat ini masih terlalu kecil untuk
+      berdiri sendiri.
+    """
+    chunks: list[Chunk] = []
+    current: list[_Block] = []
+    current_length = 0
+    small_chunk_limit = chunk_size * SMALL_CHUNK_MERGE_RATIO
+
+    def flush(carry_overlap: bool = True) -> None:
+        nonlocal current, current_length
+        chunk = _blocks_to_chunk(current)
+        if chunk:
+            chunks.append(chunk)
+
+        carried = _overlap_blocks(current, chunk_overlap) if carry_overlap else []
+
+        # Batas rentang halaman harus berlaku pada blok overlap juga. Tanpa ini
+        # overlap terus menyeret halaman lama ke chunk berikutnya: setiap kali
+        # rentang terlampaui chunk ditutup, tapi blok yang dibawa langsung
+        # memasukkan kembali halaman-halaman itu, sehingga satu chunk bisa
+        # mengklaim tujuh halaman meski batasnya tiga.
+        while carried and _page_span(carried) >= max_pages_per_chunk:
+            carried.pop(0)
+
+        current = list(carried)
+        current_length = sum(block.char_count for block in current)
+
+    for block in blocks:
+        if block.char_count > chunk_size:
+            flush()
+            for piece in _split_oversized_block(block, chunk_size):
+                chunk = _blocks_to_chunk([piece])
+                if chunk:
+                    chunks.append(chunk)
+            current, current_length = [], 0
+            continue
+
+        if current:
+            heading_changed = block.heading_path != current[0].heading_path
+            too_long = current_length + block.char_count > chunk_size
+            too_many_pages = _page_span(current + [block]) > max_pages_per_chunk
+
+            if too_long or too_many_pages:
+                flush()
+            elif heading_changed and current_length >= small_chunk_limit:
+                # Jangan biarkan satu chunk melintasi batas bagian, kecuali
+                # bagian saat ini memang terlalu pendek untuk berdiri sendiri.
+                flush(carry_overlap=False)
+
+        current.append(block)
+        current_length += block.char_count
+
+    flush(carry_overlap=False)
+    return chunks
+
+
+# ──────────────────────────────────────────────
+# Penyaring noise tingkat chunk
+# ──────────────────────────────────────────────
+
+_WORD_RE = re.compile(r"[A-Za-z]+")
+
+
+def looks_like_extraction_noise(text: str) -> bool:
+    """
+    Deteksi chunk yang isinya sisa teks rusak hasil ekstraksi PDF.
+
+    Penyaring di `extract_text` bekerja per baris dan menangkap sebagian
+    besar noise, tetapi teks terbalik dari diagram struktur organisasi
+    ("arudtakpu", "satlukasf") lolos karena secara statistik huruf-per-huruf
+    masih tampak wajar.
+
+    Pada tingkat chunk ada sinyal yang jauh lebih kuat: **prosa Bahasa
+    Indonesia yang sah selalu memuat kata fungsi.** Teks acak tidak pernah.
+    Agar tabel tidak ikut terbuang, chunk yang kaya angka atau memuat tanda
+    baca akhir kalimat tetap diloloskan.
+
+    Returns:
+        True bila chunk sebaiknya dibuang.
+    """
+    words = _WORD_RE.findall(text.lower())
+    if not words:
+        return True
+
+    stopword_ratio = sum(1 for word in words if word in INDONESIAN_STOPWORDS) / len(words)
+    if stopword_ratio > NOISE_MAX_STOPWORD_RATIO:
+        return False
+
+    # Tabel dikenali dari kepadatan angkanya.
+    digit_ratio = sum(1 for char in text if char.isdigit()) / len(text)
+    if digit_ratio >= NOISE_MAX_DIGIT_RATIO:
+        return False
+
+    # Kalimat sungguhan berakhir dengan tanda baca.
+    if any(mark in text for mark in (".", ":", ";", "?", "!")):
+        return False
+
+    return True
+
+
+# ──────────────────────────────────────────────
+# API publik
+# ──────────────────────────────────────────────
+
+def chunk_pages(
+    pages: list[tuple[int, str]],
+    chunk_size: int = CHUNK_SIZE,
+    chunk_overlap: int = CHUNK_OVERLAP,
+    min_chunk_size: int = MIN_CHUNK_SIZE,
+    max_pages_per_chunk: int = MAX_PAGES_PER_CHUNK,
+    drop_noise: bool = True,
+    verbose: bool = True,
+) -> list[Chunk]:
+    """
+    Bagi halaman-halaman hasil ekstraksi menjadi chunk yang siap diembed.
+
+    Args:
+        pages: Daftar ``(nomor_halaman, teks)`` dari `extract_text`.
+        chunk_size: Batas karakter per chunk.
+        chunk_overlap: Karakter yang dibawa ke chunk berikutnya, dibulatkan
+            ke batas paragraf.
+        min_chunk_size: Chunk lebih kecil dari ini dibuang.
+        max_pages_per_chunk: Batas halaman yang boleh diklaim satu chunk.
+        drop_noise: Buang chunk yang isinya sisa teks rusak.
+        verbose: Cetak statistik hasil chunking.
+
+    Returns:
+        Daftar `Chunk` dengan `chunk_index` berurutan.
+    """
+    lines = _to_lines(pages)
+    if not lines:
+        return []
+
+    blocks = _build_blocks(lines)
+    chunks = _pack_blocks(blocks, chunk_size, chunk_overlap, max_pages_per_chunk)
+
+    total_packed = len(chunks)
+    chunks = [c for c in chunks if c.char_count >= min_chunk_size]
+    dropped_small = total_packed - len(chunks)
+
+    dropped_noise = 0
+    if drop_noise:
+        before = len(chunks)
+        chunks = [c for c in chunks if not looks_like_extraction_noise(c.text)]
+        dropped_noise = before - len(chunks)
+
+    for i, chunk in enumerate(chunks):
+        chunk.chunk_index = i
+
+    if verbose:
+        print(f"✅ Dihasilkan {len(chunks)} chunk dari {len(pages)} halaman "
+              f"({len(blocks)} blok paragraf)")
+        if dropped_small or dropped_noise:
+            print(f"   🗑️  Dibuang: {dropped_small} chunk terlalu kecil, "
+                  f"{dropped_noise} chunk teks rusak")
+        print_chunk_stats(chunks)
 
     return chunks
 
 
-def _print_chunk_stats(chunks: list[Chunk]) -> None:
-    """Print statistik chunk untuk debugging."""
+def print_chunk_stats(chunks: list[Chunk]) -> None:
+    """Cetak statistik chunk, termasuk kualitas presisi halaman."""
     if not chunks:
         print("⚠️  Tidak ada chunk yang dihasilkan!")
         return
 
     sizes = [c.char_count for c in chunks]
     tokens = [c.estimated_tokens for c in chunks]
+    spans = [len(c.page_numbers) for c in chunks]
+    single_page = sum(1 for s in spans if s == 1)
+    with_heading = sum(1 for c in chunks if c.heading_path)
 
-    print(f"   📊 Statistik chunk:")
-    print(f"      Jumlah   : {len(chunks)}")
-    print(f"      Karakter : min={min(sizes)}, max={max(sizes)}, avg={sum(sizes)//len(sizes)}")
-    print(f"      Token est: min={min(tokens)}, max={max(tokens)}, avg={sum(tokens)//len(tokens)}")
+    print("   📊 Statistik chunk:")
+    print(f"      Jumlah        : {len(chunks)}")
+    print(f"      Karakter      : min={min(sizes)}, max={max(sizes)}, "
+          f"avg={sum(sizes) // len(sizes)}")
+    print(f"      Token est.    : min={min(tokens)}, max={max(tokens)}, "
+          f"avg={sum(tokens) // len(tokens)}")
+    print("   🎯 Presisi halaman:")
+    print(f"      Halaman/chunk : max={max(spans)}, "
+          f"avg={sum(spans) / len(spans):.2f}")
+    print(f"      Satu halaman  : {single_page}/{len(chunks)} "
+          f"({single_page / len(chunks):.0%})")
+    print(f"      Ada heading   : {with_heading}/{len(chunks)} "
+          f"({with_heading / len(chunks):.0%})")
 
 
 if __name__ == "__main__":
-    # Test dengan dummy data
     test_pages = [
-        (1, "BAB I\nPENDAHULUAN\n\nIni adalah paragraf pertama dari bab pendahuluan. "
-            "Berisi informasi umum tentang pedoman akademik universitas.\n\n"
-            "Paragraf kedua menjelaskan ruang lingkup dari pedoman ini."),
-        (2, "BAB II\nKETENTUAN UMUM\n\nPasal 1\nPedoman ini berlaku untuk seluruh "
-            "mahasiswa aktif.\n\nPasal 2\nMahasiswa wajib mengikuti peraturan yang berlaku."),
+        (1, "BAB I\nPENDAHULUAN\n"
+            "Buku pedoman akademik ini disusun sebagai acuan resmi bagi seluruh\n"
+            "mahasiswa Fakultas Teknologi Industri dalam menjalani proses\n"
+            "pembelajaran.\n"
+            "Pedoman ini mencakup ketentuan umum, kurikulum, serta prosedur\n"
+            "administrasi akademik."),
+        (2, "BAB II\nKETENTUAN UMUM\n"
+            "Pasal 1\nPedoman ini berlaku untuk seluruh mahasiswa aktif.\n"
+            "Pasal 2\nMahasiswa wajib mengikuti seluruh peraturan yang berlaku di\n"
+            "lingkungan universitas."),
     ]
 
-    chunks = chunk_pages(test_pages)
-    for chunk in chunks:
-        print(f"\n--- Chunk {chunk.chunk_index} (hal. {chunk.page_numbers}) ---")
-        print(f"Section: {chunk.section_title}")
-        print(f"Text ({chunk.char_count} chars): {chunk.text[:200]}...")
+    for chunk in chunk_pages(test_pages, chunk_size=400, chunk_overlap=80, min_chunk_size=20):
+        print(f"\n--- Chunk {chunk.chunk_index} (halaman {chunk.page_label}) ---")
+        print(f"Heading : {' > '.join(chunk.heading_path) or '-'}")
+        print(f"Teks ({chunk.char_count} chars): {chunk.text[:220]}")

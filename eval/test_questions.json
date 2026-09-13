@@ -1,162 +1,198 @@
 [
   {
     "id": 1,
-    "question": "Berapa minimal SKS yang harus ditempuh untuk mengajukan skripsi?",
-    "expected_answer_contains": ["SKS", "skripsi"],
-    "expected_pages": [],
+    "question": "Berapa IPK minimum untuk mendapatkan predikat kelulusan Cum Laude?",
     "category": "in_scope",
-    "notes": "Isi expected_pages setelah dokumen tersedia"
+    "expected_pages": [48],
+    "expected_answer_contains": ["cum laude", "3,51"],
+    "notes": "Halaman 48: predikat Pujian/Excellent IPK 3,51-4,00 dapat menjadi CUM LAUDE bila masa studi maksimal normal + 1 semester dan tidak ada nilai di bawah B."
   },
   {
     "id": 2,
-    "question": "Bagaimana prosedur pengajuan cuti kuliah?",
-    "expected_answer_contains": ["cuti", "prosedur"],
-    "expected_pages": [],
+    "question": "Berapa total SKS minimal yang harus ditempuh untuk lulus program Sarjana?",
     "category": "in_scope",
-    "notes": ""
+    "expected_pages": [27],
+    "expected_answer_contains": ["144", "sks"],
+    "notes": "Halaman 27: beban belajar paling sedikit 144 SKS."
   },
   {
     "id": 3,
-    "question": "Apa saja syarat untuk mengikuti yudisium?",
-    "expected_answer_contains": ["yudisium", "syarat"],
-    "expected_pages": [],
+    "question": "Berapa lama masa studi maksimal untuk program Sarjana di UAJY?",
     "category": "in_scope",
-    "notes": ""
+    "expected_pages": [27, 47],
+    "expected_answer_contains": ["masa studi"],
+    "notes": "Halaman 27: normal 8 semester, paling lama 6 tahun. Halaman 47: pemutusan hak studi setelah enam tahun / akhir semester XII."
   },
   {
     "id": 4,
-    "question": "Berapa IPK minimum untuk lulus cum laude?",
-    "expected_answer_contains": ["IPK", "cum laude"],
-    "expected_pages": [],
+    "question": "Berapa maksimal semester cuti studi yang dapat diberikan kepada mahasiswa?",
     "category": "in_scope",
-    "notes": ""
+    "expected_pages": [39, 40, 41],
+    "expected_answer_contains": ["cuti studi", "2 (dua) semester"],
+    "notes": "Halaman 39-41: maksimal 2 semester, baik berurutan maupun tidak."
   },
   {
     "id": 5,
-    "question": "Berapa lama masa studi maksimal untuk program S1?",
-    "expected_answer_contains": ["masa studi", "semester"],
-    "expected_pages": [],
+    "question": "Apakah cuti studi diperhitungkan sebagai masa studi?",
     "category": "in_scope",
-    "notes": ""
+    "expected_pages": [39, 40, 41],
+    "expected_answer_contains": ["cuti studi", "masa studi"],
+    "notes": "Halaman 39-41: cuti studi tidak diperhitungkan sebagai masa studi."
   },
   {
     "id": 6,
-    "question": "Bagaimana cara mengajukan KRS online?",
-    "expected_answer_contains": ["KRS"],
-    "expected_pages": [],
+    "question": "Bagaimana prosedur pengajuan cuti studi?",
     "category": "in_scope",
-    "notes": ""
+    "expected_pages": [39, 40, 41],
+    "expected_answer_contains": ["cuti studi"],
+    "notes": "Halaman 41: 'Prosedur cuti studi adalah sebagai berikut'."
   },
   {
     "id": 7,
-    "question": "Apa sanksi bagi mahasiswa yang melakukan plagiarisme?",
-    "expected_answer_contains": ["plagiarisme", "sanksi"],
-    "expected_pages": [],
+    "question": "Berapa nilai indeks untuk nilai huruf A dalam sistem penilaian UAJY?",
     "category": "in_scope",
-    "notes": ""
+    "expected_pages": [45, 46],
+    "expected_answer_contains": ["4,00"],
+    "notes": "Halaman 45-46: tabel Nilai Angka / Nilai Huruf / Nilai Indeks, A = 4,00 untuk rentang 85-100."
   },
   {
     "id": 8,
-    "question": "Berapa batas waktu pembayaran SPP?",
-    "expected_answer_contains": ["SPP", "pembayaran"],
-    "expected_pages": [],
+    "question": "Apa yang dimaksud dengan ujian pendadaran?",
     "category": "in_scope",
-    "notes": ""
+    "expected_pages": [45, 46],
+    "expected_answer_contains": ["pendadaran"],
+    "notes": "Halaman 45-46: ujian lisan untuk mengevaluasi skripsi, terdiri dari ujian skripsi dan ujian komprehensif."
   },
   {
     "id": 9,
-    "question": "Apa syarat untuk pindah program studi?",
-    "expected_answer_contains": ["pindah", "program studi"],
-    "expected_pages": [],
+    "question": "Apa yang dimaksud dengan Sistem Kredit Semester?",
     "category": "in_scope",
-    "notes": ""
+    "expected_pages": [25, 42, 43],
+    "expected_answer_contains": ["beban studi"],
+    "notes": "Halaman 25 dan 42-43: SKS dipakai untuk menyatakan beban studi mahasiswa dan beban kerja dosen."
   },
   {
     "id": 10,
-    "question": "Bagaimana sistem penilaian (grading) yang berlaku?",
-    "expected_answer_contains": ["nilai", "grading"],
-    "expected_pages": [],
+    "question": "Bagaimana ketentuan beban studi dan beban kredit semester mahasiswa?",
     "category": "in_scope",
-    "notes": ""
+    "expected_pages": [42, 43],
+    "expected_answer_contains": ["beban studi"],
+    "notes": "Halaman 42-43: butir 5 tentang beban studi dan beban kredit semester."
   },
   {
     "id": 11,
-    "question": "Apa saja hak dan kewajiban mahasiswa?",
-    "expected_answer_contains": ["hak", "kewajiban"],
-    "expected_pages": [],
+    "question": "Apa saja ketentuan herregistrasi bagi mahasiswa?",
     "category": "in_scope",
-    "notes": ""
+    "expected_pages": [38, 39, 40, 41, 42],
+    "expected_answer_contains": ["herregistrasi"],
+    "notes": "Halaman 38-42: bagian G. Herregistrasi."
   },
   {
     "id": 12,
-    "question": "Bagaimana prosedur pengajuan beasiswa?",
-    "expected_answer_contains": ["beasiswa"],
-    "expected_pages": [],
+    "question": "Bagaimana ketentuan evaluasi hasil belajar dua tahun pertama?",
     "category": "in_scope",
-    "notes": ""
+    "expected_pages": [46, 47],
+    "expected_answer_contains": ["evaluasi"],
+    "notes": "Halaman 46: 'Evaluasi Hasil Belajar Dua Tahun Pertama (Evaluasi Ke-1)', evaluasi preventif dan definitif."
   },
   {
     "id": 13,
-    "question": "Apa itu mata kuliah prasyarat?",
-    "expected_answer_contains": ["prasyarat", "mata kuliah"],
-    "expected_pages": [],
+    "question": "Apa itu program remedi di UAJY?",
     "category": "in_scope",
-    "notes": ""
+    "expected_pages": [49, 50],
+    "expected_answer_contains": ["remedi"],
+    "notes": "Halaman 49-50: bagian P. Program Remedi."
   },
   {
     "id": 14,
-    "question": "Berapa jumlah SKS yang harus ditempuh untuk lulus?",
-    "expected_answer_contains": ["SKS", "lulus"],
-    "expected_pages": [],
+    "question": "Beasiswa apa saja yang tersedia bagi mahasiswa UAJY?",
     "category": "in_scope",
-    "notes": ""
+    "expected_pages": [32, 33, 34, 35, 36],
+    "expected_answer_contains": ["beasiswa"],
+    "notes": "Halaman 32-36: berbagai skema beasiswa termasuk bebas SPP Tetap dan SPP Variabel."
   },
   {
     "id": 15,
-    "question": "Bagaimana prosedur mengajukan surat keterangan aktif kuliah?",
-    "expected_answer_contains": ["surat keterangan"],
-    "expected_pages": [],
+    "question": "Bagaimana ketentuan pindah program studi?",
     "category": "in_scope",
-    "notes": ""
+    "expected_pages": [36, 37, 80, 81],
+    "expected_answer_contains": ["pindah program"],
+    "notes": "Halaman 36-37 dan 80-81 memuat ketentuan pindah program studi."
   },
   {
     "id": 16,
     "question": "Siapa presiden Indonesia saat ini?",
-    "expected_answer_contains": ["di luar cakupan", "tidak dapat menjawab", "dokumen"],
-    "expected_pages": [],
     "category": "out_of_scope",
-    "notes": "Harus ditolak sopan"
+    "expected_pages": [],
+    "expected_answer_contains": [],
+    "notes": "Kasus uji tersulit: dokumen memuat 'Peraturan Presiden Republik Indonesia' pada halaman 27, sehingga pertanyaan ini cocok secara leksikal. Hanya reranker dan gate berlapis yang seharusnya menolaknya."
   },
   {
     "id": 17,
     "question": "Apa rumus pythagoras?",
-    "expected_answer_contains": ["di luar cakupan", "tidak dapat menjawab", "dokumen"],
-    "expected_pages": [],
     "category": "out_of_scope",
-    "notes": "Harus ditolak sopan"
+    "expected_pages": [],
+    "expected_answer_contains": [],
+    "notes": "Tidak ada istilah yang cocok di dokumen. Harus ditolak."
   },
   {
     "id": 18,
     "question": "Berapa harga iPhone terbaru?",
-    "expected_answer_contains": ["di luar cakupan", "tidak dapat menjawab", "dokumen"],
-    "expected_pages": [],
     "category": "out_of_scope",
-    "notes": "Harus ditolak sopan"
+    "expected_pages": [],
+    "expected_answer_contains": [],
+    "notes": "Kata 'iPhone' muncul di dokumen (panduan aplikasi mobile), tetapi harganya tidak. Harus ditolak."
   },
   {
     "id": 19,
     "question": "Ceritakan tentang sejarah perang dunia kedua",
-    "expected_answer_contains": ["di luar cakupan", "tidak dapat menjawab", "dokumen"],
-    "expected_pages": [],
     "category": "out_of_scope",
-    "notes": "Harus ditolak sopan"
+    "expected_pages": [],
+    "expected_answer_contains": [],
+    "notes": "Harus ditolak."
   },
   {
     "id": 20,
     "question": "Bagaimana cara memasak nasi goreng?",
-    "expected_answer_contains": ["di luar cakupan", "tidak dapat menjawab", "dokumen"],
-    "expected_pages": [],
     "category": "out_of_scope",
-    "notes": "Harus ditolak sopan"
+    "expected_pages": [],
+    "expected_answer_contains": [],
+    "notes": "Harus ditolak."
+  },
+  {
+    "id": 21,
+    "question": "Berapa maksimalnya?",
+    "category": "in_scope",
+    "expected_pages": [39, 40, 41],
+    "expected_answer_contains": ["cuti"],
+    "chat_history": [
+      {
+        "role": "user",
+        "content": "Bagaimana ketentuan cuti studi di UAJY?"
+      },
+      {
+        "role": "assistant",
+        "content": "Cuti studi dapat diajukan oleh mahasiswa yang telah mengikuti kegiatan akademik minimal 2 semester dan berstatus mahasiswa aktif pada semester sebelumnya."
+      }
+    ],
+    "notes": "Uji query rewriting. Tanpa penulisan ulang, 'Berapa maksimalnya?' tidak membawa informasi apa pun bagi retrieval."
+  },
+  {
+    "id": 22,
+    "question": "Apa syarat untuk mendapatkan yang tertinggi?",
+    "category": "in_scope",
+    "expected_pages": [48],
+    "expected_answer_contains": ["cum laude"],
+    "chat_history": [
+      {
+        "role": "user",
+        "content": "Apa saja predikat kelulusan untuk program Sarjana?"
+      },
+      {
+        "role": "assistant",
+        "content": "Predikat kelulusan program Sarjana terdiri dari Memuaskan (Good), Sangat Memuaskan (Very Good), dan Pujian (Excellent)."
+      }
+    ],
+    "notes": "Uji query rewriting pada rujukan implisit ke 'predikat kelulusan tertinggi'."
   }
 ]
