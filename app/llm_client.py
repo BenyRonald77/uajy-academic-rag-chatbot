@@ -340,8 +340,20 @@ def clear_query_embedding_cache() -> None:
 
 
 def test_connection(api_key: str | None = None) -> bool:
-    """Cek koneksi ke Gemini API. True jika berhasil."""
+    """
+    Cek koneksi ke Gemini API. True jika berhasil.
+
+    ``max_tokens`` sengaja dilonggarkan: pada model Gemini 2.5/3.x, token
+    *thinking* ikut dihitung ke dalam ``max_output_tokens``. Dengan batas
+    sangat kecil, model menghabiskan seluruh kuota untuk berpikir lalu
+    berhenti dengan ``finish_reason=MAX_TOKENS`` tanpa menghasilkan teks —
+    membuat koneksi yang sehat terlaporkan gagal.
+    """
     try:
-        return bool(call_utility_llm("Balas hanya dengan 'OK'.", max_tokens=10, api_key=api_key))
+        return bool(call_utility_llm(
+            "Balas hanya dengan kata: OK",
+            max_tokens=256,
+            api_key=api_key,
+        ))
     except Exception:
         return False

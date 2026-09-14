@@ -395,6 +395,7 @@ def outcome_to_debug(outcome: RetrievalOutcome) -> dict:
         "was_rewritten": outcome.was_rewritten,
         "refused": outcome.refused,
         "refusal_reason": outcome.refusal_reason,
+        "rerank_failed": outcome.rerank_failed,
     }
 
 
@@ -435,6 +436,14 @@ def render_retrieval_debug(debug: dict) -> None:
                     f", reranker {'lolos' if gate.get('rerank_pass') else 'menolak'}"
                     if "rerank_pass" in gate else ""
                 )
+            )
+
+        if debug.get("rerank_failed"):
+            st.error(
+                "Reranker gagal dipanggil, jadi urutan hasil fusi dipakai apa "
+                "adanya dan gate presisi tidak berjalan untuk pertanyaan ini. "
+                "Biasanya karena API sedang sibuk — coba ulangi.",
+                icon="🔥",
             )
 
         if debug.get("refused"):
@@ -885,9 +894,19 @@ def main() -> None:
             value=DEFAULT_RETRIEVAL_CONFIG.use_rerank,
             help="Menilai ulang kandidat dengan melihat pertanyaan dan potongan "
                  "dokumen bersamaan. Menambah satu panggilan API per pertanyaan, "
-                 "tetapi menaikkan presisi dan memperkuat penolakan pertanyaan "
-                 "di luar cakupan.",
+                 "tetapi menaikkan presisi dan menjadi penjaga utama terhadap "
+                 "pertanyaan di luar cakupan.",
         )
+        if not use_rerank:
+            # Pengukuran menunjukkan reranker adalah satu-satunya tahap yang
+            # mampu menolak pertanyaan di luar cakupan pada index ini, karena
+            # cosine similarity in-scope dan out-of-scope saling tumpang tindih.
+            st.warning(
+                "Tanpa reranker, penolakan pertanyaan di luar cakupan turun ke "
+                "**0%** di tingkat retrieval. Jawaban masih dijaga oleh system "
+                "prompt, tetapi konteks yang tidak relevan bisa ikut terkirim.",
+                icon="⚠️",
+            )
         use_rewrite = st.toggle(
             "Query rewriting",
             value=DEFAULT_RETRIEVAL_CONFIG.use_query_rewrite,
