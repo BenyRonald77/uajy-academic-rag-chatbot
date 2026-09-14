@@ -148,8 +148,15 @@ class RetrievalOutcome:
     refused: bool = False
     refusal_reason: str = ""
     was_rewritten: bool = False
+
+    #: True bila tahap reranking diminta tetapi gagal dijalankan. Penting
+    #: untuk diketahui: saat ini reranker adalah satu-satunya tahap yang
+    #: mampu menolak pertanyaan di luar cakupan, jadi kegagalannya berarti
+    #: pertahanan anti-halusinasi tingkat retrieval sedang tidak aktif.
+    rerank_failed: bool = False
+
     timings_ms: dict[str, float] = field(default_factory=dict)
-    gate: dict[str, float | bool] = field(default_factory=dict)
+    gate: dict[str, float | bool | None] = field(default_factory=dict)
     config: RetrievalConfig = DEFAULT_RETRIEVAL_CONFIG
 
     @property
@@ -417,26 +424,35 @@ class HybridRetriever:
         # Tahap 5 — reranking.
         if cfg.use_rerank and len(candidates) > 1:
             started = time.perf_counter()
-            candidates = self._rerank(effective_query, candidates, cfg, api_key)
+            candidates, rerank_ok = self._rerank(
+                effective_query, candidates, cfg, api_key
+            )
             timings["rerank_ms"] = (time.perf_counter() - started) * 1000
             outcome.candidates = candidates
+            outcome.rerank_failed = not rerank_ok
 
-            passed = [
-                c for c in candidates
-                if c.rerank_score is None or c.rerank_score >= cfg.rerank_min_score
-            ]
-            if not passed:
-                best = max((c.rerank_score or 0.0) for c in candidates)
-                outcome.refused = True
-                outcome.refusal_reason = (
-                    f"Reranker menilai semua kandidat tidak relevan "
-                    f"(skor tertinggi {best:.1f} < {cfg.rerank_min_score:.1f})."
-                )
-                outcome.gate["rerank_pass"] = False
-                return outcome
+            if rerank_ok:
+                passed = [
+                    c for c in candidates
+                    if (c.rerank_score or 0.0) >= cfg.rerank_min_score
+                ]
+                if not passed:
+                    best = max((c.rerank_score or 0.0) for c in candidates)
+                    outcome.refused = True
+                    outcome.refusal_reason = (
+                        f"Reranker menilai semua kandidat tidak relevan "
+                        f"(skor tertinggi {best:.1f} < {cfg.rerank_min_score:.1f})."
+                    )
+                    outcome.gate["rerank_pass"] = False
+                    return outcome
 
-            outcome.gate["rerank_pass"] = True
-            candidates = passed
+                outcome.gate["rerank_pass"] = True
+                candidates = passed
+            else:
+                # Reranking tidak pernah terjadi. Jawaban tetap diberikan dari
+                # urutan fusi, tetapi gate TIDAK boleh mengaku sudah lolos —
+                # kalau tidak, kegagalan API akan tampak seperti keberhasilan.
+                outcome.gate["rerank_pass"] = None
 
         # Tahap 6 — ambil top-k final.
         contexts = candidates[: cfg.top_k]
@@ -573,7 +589,7 @@ class HybridRetriever:
         candidates: list[RetrievalCandidate],
         cfg: RetrievalConfig,
         api_key: str | None,
-    ) -> list[RetrievalCandidate]:
+    ) -> tuple[list[RetrievalCandidate], bool]:
         from app.reranker import rerank_candidates
 
         return rerank_candidates(query, candidates, api_key=api_key)

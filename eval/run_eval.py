@@ -96,6 +96,8 @@ class QuestionResult:
     refusal_reason: str = ""
     effective_query: str = ""
     was_rewritten: bool = False
+    rerank_failed: bool = False
+    gate: dict = field(default_factory=dict)
 
     top_dense_score: float = 0.0
     latency_ms: float = 0.0
@@ -157,6 +159,11 @@ def score_question(question: dict, outcome: RetrievalOutcome, latency_ms: float)
         refusal_reason=outcome.refusal_reason,
         effective_query=outcome.effective_query,
         was_rewritten=outcome.was_rewritten,
+        rerank_failed=outcome.rerank_failed,
+        gate={
+            k: (round(v, 4) if isinstance(v, float) else v)
+            for k, v in outcome.gate.items()
+        },
         top_dense_score=round(
             max((c.dense_score for c in outcome.candidates), default=0.0), 4
         ),
@@ -181,11 +188,16 @@ def aggregate(results: list[QuestionResult]) -> dict:
     conversational_hits = sum(1 for r in conversational if r.page_hit)
 
     latencies = [r.latency_ms for r in results]
+    rerank_failures = sum(1 for r in results if r.rerank_failed)
 
     def ratio(hits: int, total: int) -> float:
         return hits / total if total else 0.0
 
     return {
+        # Angka ini wajib dibaca bersama akurasi penolakan: setiap kegagalan
+        # reranker berarti satu pertanyaan yang gate presisinya tidak berjalan,
+        # sehingga akurasi penolakan pada run itu tidak mencerminkan desainnya.
+        "rerank_failures": rerank_failures,
         "page_recall": ratio(page_hits, len(scorable)),
         "page_recall_hits": page_hits,
         "page_recall_total": len(scorable),
@@ -234,22 +246,24 @@ def evaluate_preset(
           f"rewrite={config.use_query_rewrite}  top_k={config.top_k}")
     print(f"{'=' * 74}")
 
+    # Kosongkan cache embedding agar tiap konfigurasi diukur dari kondisi yang
+    # sama. Tanpa ini, konfigurasi yang dijalankan lebih dulu menanggung semua
+    # biaya panggilan API dan konfigurasi berikutnya tampak jauh lebih cepat
+    # hanya karena embedding-nya sudah tersimpan — perbandingan latensinya
+    # menjadi menyesatkan.
+    from app.llm_client import clear_query_embedding_cache
+
+    clear_query_embedding_cache()
+
     results: list[QuestionResult] = []
 
     for question in questions:
-        started = time.perf_counter()
-        try:
-            outcome = retriever.retrieve(
-                question["question"],
-                config=config,
-                chat_history=question.get("chat_history"),
-                api_key=api_key,
-            )
-        except Exception as e:
-            print(f"  ❌ Q{question['id']} gagal: {e}")
+        outcome, latency_ms = _retrieve_with_retry(
+            retriever, question, config, api_key
+        )
+        if outcome is None:
             continue
 
-        latency_ms = (time.perf_counter() - started) * 1000
         result = score_question(question, outcome, latency_ms)
         results.append(result)
 
@@ -259,6 +273,53 @@ def evaluate_preset(
     metrics = aggregate(results)
     _print_preset_summary(metrics)
     return results, metrics
+
+
+#: Gangguan sesaat dari sisi layanan, bukan cerminan kualitas retrieval.
+_TRANSIENT_MARKERS = ("503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "500")
+
+
+def _retrieve_with_retry(
+    retriever: HybridRetriever,
+    question: dict,
+    config: RetrievalConfig,
+    api_key: str | None,
+    max_attempts: int = 3,
+) -> tuple[RetrievalOutcome | None, float]:
+    """
+    Jalankan retrieval dengan percobaan ulang untuk galat sesaat.
+
+    Error 503/429 dari sisi layanan tidak berkaitan dengan kualitas
+    retrieval. Bila pertanyaan yang terkena galat itu dilewati, jumlah
+    pertanyaan antar konfigurasi menjadi berbeda dan tabel perbandingannya
+    tidak lagi setara.
+
+    Returns:
+        Tuple ``(outcome, latency_ms)``. ``outcome`` bernilai ``None`` bila
+        seluruh percobaan gagal.
+    """
+    for attempt in range(1, max_attempts + 1):
+        started = time.perf_counter()
+        try:
+            outcome = retriever.retrieve(
+                question["question"],
+                config=config,
+                chat_history=question.get("chat_history"),
+                api_key=api_key,
+            )
+            return outcome, (time.perf_counter() - started) * 1000
+        except Exception as e:
+            message = str(e)
+            transient = any(marker in message for marker in _TRANSIENT_MARKERS)
+            if not transient or attempt == max_attempts:
+                print(f"  ❌ Q{question['id']} gagal: {message[:150]}")
+                return None, 0.0
+            wait = 2.0 * attempt
+            print(f"  ⏳ Q{question['id']} galat sesaat, mencoba lagi dalam "
+                  f"{wait:.0f}s (percobaan {attempt}/{max_attempts})")
+            time.sleep(wait)
+
+    return None, 0.0
 
 
 def _print_question_result(result: QuestionResult) -> None:
@@ -306,6 +367,9 @@ def _print_preset_summary(metrics: dict) -> None:
           f"({metrics['correct_refusals']}/{metrics['out_of_scope_total']})")
     print(f"  ⚠️  Penolakan salah      : {metrics['false_refusal_rate']:.1%} "
           f"({metrics['false_refusals']}/{metrics['in_scope_total']})")
+    if metrics["rerank_failures"]:
+        print(f"  🔥 Reranker GAGAL       : {metrics['rerank_failures']} pertanyaan — "
+              f"angka penolakan di atas TIDAK sahih untuk run ini")
     if metrics["conversational_total"]:
         print(f"  💬 Recall percakapan    : {metrics['conversational_recall']:.1%} "
               f"({metrics['conversational_hits']}/{metrics['conversational_total']})")

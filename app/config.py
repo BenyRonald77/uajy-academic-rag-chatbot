@@ -33,7 +33,18 @@ INDEX_INFO_PATH = INDEX_DIR / "index_info.json"
 LLM_MODEL = "gemini-2.5-flash"
 
 #: Model murah & cepat untuk tugas bantu (rerank, query rewriting).
-UTILITY_MODEL = "gemini-2.5-flash-lite"
+#:
+#: Pendahulunya, ``gemini-2.5-flash-lite``, kini menolak permintaan dengan
+#: 404 ("no longer available to new users") — padahal ``models.list()`` masih
+#: melaporkannya tersedia, sehingga kegagalannya hanya terlihat saat
+#: dipanggil sungguhan. Karena reranker dan query rewriter sengaja dibuat
+#: fail-safe, keduanya diam-diam berhenti bekerja tanpa pesan error apa pun.
+#:
+#: ``gemini-3.5-flash-lite`` justru lebih cocok untuk peran ini: token
+#: *thinking*-nya nol secara default, jadi lebih cepat, lebih murah, dan
+#: deterministik. Catatan: model ini MENOLAK parameter ``thinking_config``
+#: dengan 400 INVALID_ARGUMENT, jadi parameter itu tidak boleh dikirim.
+UTILITY_MODEL = "gemini-3.5-flash-lite"
 
 #: Model embedding untuk chunk dokumen dan query.
 EMBEDDING_MODEL = "gemini-embedding-001"
@@ -98,9 +109,28 @@ class RetrievalConfig:
     dense_weight: float = 1.0
     lexical_weight: float = 1.0
 
-    # ── Gate relevansi (pertahanan anti-halusinasi lapis pertama) ──
-    # Cosine similarity minimum agar jalur dense dianggap menemukan sesuatu.
-    dense_threshold: float = 0.30
+    # ── Gate relevansi (pertahanan anti-halusinasi) ──
+    #
+    # PENTING — hasil pengukuran pada index saat ini:
+    # Sejak embedding dibangun dengan task type RETRIEVAL_DOCUMENT/QUERY,
+    # cosine similarity menyempit ke pita tinggi dan TUMPANG TINDIH antara
+    # pertanyaan yang relevan dan yang di luar cakupan:
+    #
+    #     in-scope     : 0,762 – 0,866
+    #     out-of-scope : 0,729 – 0,766
+    #
+    # Artinya tidak ada satu nilai ambang pun yang mampu memisahkan keduanya.
+    # Ambang 0,30 warisan index lama (embedding generik) meloloskan SEMUA
+    # pertanyaan di luar cakupan — akurasi penolakannya terukur 0%.
+    #
+    # Karena itu ambang ini diturunkan perannya menjadi *lantai kewajaran*
+    # untuk menangkap query patologis, BUKAN pemisah relevansi. Yang menjadi
+    # gate presisi sebenarnya adalah reranker: pada pengukuran yang sama ia
+    # menolak 5/5 pertanyaan di luar cakupan dengan memberi skor 0–1.
+    #
+    # Konsekuensinya: mematikan `use_rerank` melemahkan pertahanan
+    # anti-halusinasi di tingkat retrieval secara signifikan.
+    dense_threshold: float = 0.70
 
     # Porsi bobot IDF token query yang harus muncul di chunk agar jalur
     # leksikal dianggap cocok. Menjaga pertanyaan di luar cakupan tetap

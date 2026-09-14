@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 
 from app.llm_client import call_utility_llm
 
@@ -126,17 +127,46 @@ def parse_rerank_response(raw: str, expected: int) -> dict[int, float]:
     return scores
 
 
+#: Percobaan ulang untuk galat sesaat. Reranker adalah gate presisi utama,
+#: jadi menyerah pada percobaan pertama terlalu mahal harganya.
+_MAX_ATTEMPTS = 3
+_TRANSIENT_MARKERS = ("503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "500")
+
+
+def _call_reranker(prompt: str, api_key: str | None) -> str | None:
+    """Panggil model reranker, ulangi bila galatnya bersifat sesaat."""
+    for attempt in range(1, _MAX_ATTEMPTS + 1):
+        try:
+            return call_utility_llm(
+                prompt,
+                system_instruction=RERANK_SYSTEM_PROMPT,
+                max_tokens=512,
+                api_key=api_key,
+                json_mode=True,
+            )
+        except Exception as e:
+            message = str(e)
+            transient = any(marker in message for marker in _TRANSIENT_MARKERS)
+            if not transient or attempt == _MAX_ATTEMPTS:
+                return None
+            time.sleep(1.5 * attempt)
+    return None
+
+
 def rerank_candidates(
     query: str,
     candidates: list,
     api_key: str | None = None,
-) -> list:
+) -> tuple[list, bool]:
     """
     Nilai ulang dan urutkan kandidat berdasarkan kemampuannya menjawab query.
 
-    Mengisi atribut ``rerank_score`` pada setiap kandidat lalu mengurutkan
-    dari skor tertinggi. Kandidat yang tidak dinilai model (jarang terjadi)
-    mempertahankan urutan fusinya di bagian bawah.
+    Mengembalikan status keberhasilan, bukan hanya daftarnya. Alasannya
+    penting: reranker adalah satu-satunya tahap yang mampu menolak pertanyaan
+    di luar cakupan pada index ini. Bila kegagalannya tidak dilaporkan,
+    pemanggil tidak bisa membedakan "semua kandidat dinilai tidak relevan"
+    dari "penilaian tidak pernah terjadi" — dan pertahanan anti-halusinasi
+    lenyap tanpa jejak saat API sedang sibuk.
 
     Args:
         query: Pertanyaan (sudah melalui rewriting jika aktif).
@@ -144,40 +174,31 @@ def rerank_candidates(
         api_key: Override API key Gemini.
 
     Returns:
-        Daftar kandidat yang sudah diurutkan ulang. Jika reranking gagal,
-        daftar asli dikembalikan tanpa perubahan (``rerank_score`` tetap
-        ``None``), sehingga gate reranker melewatkannya.
+        Tuple ``(kandidat, berhasil)``. Bila ``berhasil`` bernilai ``False``,
+        urutan fusi dipertahankan apa adanya dan ``rerank_score`` tetap
+        ``None`` agar chatbot tetap bisa menjawab.
     """
     if len(candidates) <= 1:
-        return candidates
+        return candidates, True
 
     snippets = [_snippet_for(c) for c in candidates]
-    prompt = build_rerank_prompt(query, snippets)
-
-    try:
-        raw = call_utility_llm(
-            prompt,
-            system_instruction=RERANK_SYSTEM_PROMPT,
-            max_tokens=512,
-            api_key=api_key,
-            json_mode=True,
-        )
-    except Exception:
-        # Fail-safe: pertahankan urutan fusi agar chatbot tetap menjawab.
-        return candidates
+    raw = _call_reranker(build_rerank_prompt(query, snippets), api_key)
+    if raw is None:
+        return candidates, False
 
     scores = parse_rerank_response(raw, expected=len(candidates))
     if not scores:
-        return candidates
+        return candidates, False
 
+    # Model berhasil menilai, jadi kandidat yang TIDAK disebutkan dianggap
+    # sengaja diabaikan dan diberi skor 0 — bukan dibiarkan tanpa skor.
+    # Membiarkannya ``None`` akan meloloskannya dari gate relevansi.
     for position, candidate in enumerate(candidates, start=1):
-        candidate.rerank_score = scores.get(position)
+        candidate.rerank_score = scores.get(position, 0.0)
 
-    # Kandidat tanpa skor diletakkan setelah yang berskor, urutan fusi dijaga.
-    def sort_key(item: tuple[int, object]) -> tuple:
-        position, candidate = item
-        score = getattr(candidate, "rerank_score", None)
-        return (0 if score is None else 1, score or 0.0, -position)
-
-    ordered = sorted(enumerate(candidates), key=sort_key, reverse=True)
-    return [candidate for _, candidate in ordered]
+    ordered = sorted(
+        enumerate(candidates),
+        key=lambda item: (item[1].rerank_score, -item[0]),
+        reverse=True,
+    )
+    return [candidate for _, candidate in ordered], True
