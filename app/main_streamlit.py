@@ -116,7 +116,9 @@ def outcome_to_debug(outcome: RetrievalOutcome) -> dict:
             "Chunk": candidate.chunk_index,
             **({"Dokumen": candidate.document_label[:24]} if banyak_dokumen else {}),
             "Halaman": candidate.page_label,
-            "Bagian": candidate.heading_label or "-",
+            # Panel debug menampilkan jalur lengkap agar hierarki bisa diaudit;
+            # sitasi ke pengguna hanya memakai heading terdalam.
+            "Bagian": candidate.heading_path_label or "-",
             "Ditemukan oleh": candidate.retrieved_by,
             "Dense (cosine)": round(candidate.dense_score, 3),
             "BM25": round(candidate.lexical_score, 2),

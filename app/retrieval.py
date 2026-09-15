@@ -110,7 +110,27 @@ class RetrievalCandidate:
 
     @property
     def heading_label(self) -> str:
-        """Judul bagian terdalam, atau heading path bila tersedia."""
+        """
+        Judul bagian untuk ditampilkan pada sitasi.
+
+        Hanya heading **terdalam**, bukan seluruh jalurnya. Pengukuran pada
+        dokumen ini menunjukkan alasannya: judul akar berasal dari aturan
+        "baris huruf kapital adalah judul", yang pada dokumen tanpa penanda
+        "BAB" ikut menangkap label kolom tabel. Akibatnya 44% chunk memiliki
+        akar yang tidak bermakna, sedangkan heading terdalamnya hanya 8% —
+        dan justru yang terdalam itulah yang paling spesifik serta paling
+        berguna bagi pembaca ("H. Cuti Studi", bukan "PROGRAM › ...").
+
+        Jalur lengkapnya tetap dipakai untuk embedding dan tersedia di panel
+        debug lewat `heading_path_label`.
+        """
+        if self.section_title:
+            return self.section_title
+        return self.heading_path[-1] if self.heading_path else ""
+
+    @property
+    def heading_path_label(self) -> str:
+        """Jalur heading lengkap, untuk audit di panel debug."""
         if self.heading_path:
             return " › ".join(self.heading_path)
         return self.section_title

@@ -20,7 +20,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from app.config import DATA_DIR, INDEX_INFO_PATH
+from app.config import DATA_DIR, INDEX_INFO_PATH, INGESTION_PIPELINE_VERSION
 
 
 def file_sha256(path: str | Path) -> str:
@@ -60,6 +60,28 @@ class IndexFreshness:
     documents: list[DocumentStatus] = field(default_factory=list)
     untracked_documents: list[str] = field(default_factory=list)
 
+    #: Versi pipeline yang tercatat pada index, dan versi kode saat ini.
+    #: Index yang dibangun sebelum penomoran ini ada dianggap versi 0.
+    indexed_pipeline_version: int = 0
+    current_pipeline_version: int = INGESTION_PIPELINE_VERSION
+
+    @property
+    def pipeline_outdated(self) -> bool:
+        """
+        True bila index dibangun oleh logika pipeline yang lebih lama.
+
+        Ini menangkap kelas keusangan yang tidak terlihat dari hash dokumen:
+        PDF-nya tidak berubah, tetapi aturan ekstraksi atau chunking sudah
+        diperbaiki sehingga isi chunk yang dihasilkan berbeda.
+
+        Bernilai False bila catatan build tidak ada sama sekali. Keadaan itu
+        sudah dilaporkan lewat pesannya sendiri, dan menandainya usang di sini
+        hanya akan memunculkan dua keluhan untuk satu sebab yang sama.
+        """
+        if not self.has_info:
+            return False
+        return self.indexed_pipeline_version < self.current_pipeline_version
+
     @property
     def changed(self) -> list[DocumentStatus]:
         return [d for d in self.documents if d.changed]
@@ -75,10 +97,11 @@ class IndexFreshness:
 
         Dokumen yang hilang **tidak** membuat index usang: index-nya masih
         sahih, hanya berkas sumbernya yang tidak lagi tersedia untuk diperiksa.
-        Yang membuat usang adalah isi yang berubah atau dokumen baru yang
-        belum terindeks.
+        Yang membuat usang adalah isi dokumen yang berubah, dokumen baru yang
+        belum terindeks, atau logika pipeline yang sudah lebih maju daripada
+        saat index dibangun.
         """
-        return bool(self.changed or self.untracked_documents)
+        return bool(self.changed or self.untracked_documents or self.pipeline_outdated)
 
     def messages(self) -> list[str]:
         """Pesan siap tampil, satu per masalah yang ditemukan."""
@@ -91,6 +114,15 @@ class IndexFreshness:
                 "mengaktifkan deteksi otomatis."
             )
             return pesan
+
+        if self.pipeline_outdated:
+            pesan.append(
+                f"Pipeline ingestion sudah diperbarui "
+                f"(versi {self.indexed_pipeline_version} → "
+                f"{self.current_pipeline_version}). Dokumennya tidak berubah, "
+                "tetapi aturan ekstraksi atau chunking sudah diperbaiki, "
+                "sehingga index sekarang menghasilkan chunk yang berbeda."
+            )
 
         for doc in self.changed:
             pesan.append(
@@ -160,6 +192,8 @@ def check_index_freshness(
     freshness = IndexFreshness(has_info=bool(index_info))
     if not index_info:
         return freshness
+
+    freshness.indexed_pipeline_version = int(index_info.get("pipeline_version", 0) or 0)
 
     data_dir = Path(data_dir)
     tercatat: set[str] = set()

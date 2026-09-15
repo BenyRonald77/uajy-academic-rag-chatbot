@@ -12,6 +12,7 @@ import json
 
 import pytest
 
+from app.config import INGESTION_PIPELINE_VERSION
 from app.index_status import (
     DocumentStatus,
     IndexFreshness,
@@ -33,12 +34,19 @@ def data_dir(tmp_path):
 
 
 def info_for(data_dir, names: list[str]) -> dict:
-    """Catatan build yang cocok dengan isi folder saat ini."""
+    """
+    Catatan build yang cocok dengan isi folder saat ini.
+
+    Menyertakan `pipeline_version` terkini agar mewakili index yang benar-benar
+    baru dibangun. Tanpa itu, index dianggap dibuat oleh logika pipeline yang
+    lebih lama — dan memang begitu seharusnya.
+    """
     return {
+        "pipeline_version": INGESTION_PIPELINE_VERSION,
         "source_documents": [
             {"name": name, "sha256": file_sha256(data_dir / name)}
             for name in names
-        ]
+        ],
     }
 
 
@@ -141,10 +149,11 @@ class TestCheckIndexFreshness:
 
     def test_format_lama_tetap_diperiksa(self, data_dir):
         info = {
+            "pipeline_version": INGESTION_PIPELINE_VERSION,
             "source_pdf": {
                 "name": "pedoman.pdf",
                 "sha256": file_sha256(data_dir / "pedoman.pdf"),
-            }
+            },
         }
         assert check_index_freshness(info, data_dir).changed == []
 
