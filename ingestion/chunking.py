@@ -92,6 +92,11 @@ class Chunk:
     heading_path: list[str] = field(default_factory=list)
     chunk_index: int = 0
 
+    #: Nama berkas dokumen asal. Kosong berarti index dokumen tunggal versi
+    #: lama. Nomor halaman hanya bermakna dalam konteks dokumennya, jadi
+    #: sitasi wajib menyertakan asal dokumen begitu ada lebih dari satu.
+    source_document: str = ""
+
     @property
     def char_count(self) -> int:
         return len(self.text)

@@ -78,6 +78,7 @@ class RetrievalCandidate:
     page_numbers: list[int]
     section_title: str = ""
     heading_path: list[str] = field(default_factory=list)
+    source_document: str = ""
 
     # Jalur dense.
     dense_score: float = 0.0
@@ -113,6 +114,18 @@ class RetrievalCandidate:
         if self.heading_path:
             return " › ".join(self.heading_path)
         return self.section_title
+
+    @property
+    def document_label(self) -> str:
+        """
+        Nama dokumen tanpa ekstensi, untuk ditampilkan pada sitasi.
+
+        Kosong pada index dokumen tunggal versi lama, sehingga sitasinya tetap
+        ringkas seperti sebelumnya.
+        """
+        if not self.source_document:
+            return ""
+        return self.source_document.rsplit(".", 1)[0]
 
     @property
     def retrieved_by(self) -> str:
@@ -278,27 +291,71 @@ class HybridRetriever:
 
     # ── Pencarian per jalur ────────────────────
 
-    def dense_search(self, query_embedding: list[float], top_n: int) -> list[tuple[int, float]]:
+    def allowed_doc_ids(self, document_filter: tuple[str, ...]) -> set[int] | None:
+        """
+        Kumpulan ``doc_id`` yang lolos filter dokumen.
+
+        Returns:
+            ``None`` bila tidak ada filter, sehingga pemanggil bisa melewati
+            penyaringan sama sekali.
+        """
+        if not document_filter or not self.metadata:
+            return None
+
+        diizinkan = set(document_filter)
+        return {
+            doc_id
+            for doc_id, meta in enumerate(self.metadata)
+            if meta.get("source_document", "") in diizinkan
+        }
+
+    def dense_search(
+        self,
+        query_embedding: list[float],
+        top_n: int,
+        allowed: set[int] | None = None,
+    ) -> list[tuple[int, float]]:
         """
         Cari lewat FAISS.
+
+        Args:
+            query_embedding: Embedding pertanyaan.
+            top_n: Jumlah hasil yang diinginkan.
+            allowed: Bila diberikan, hanya ``doc_id`` ini yang disertakan.
 
         Returns:
             Daftar ``(doc_id, cosine_score)`` terurut dari paling mirip.
         """
         query_vector = self._as_unit_vector(query_embedding)
-        scores, indices = self.index.search(query_vector, min(top_n, self.index.ntotal))
 
-        return [
-            (int(idx), float(score))
-            for score, idx in zip(scores[0], indices[0])
-            if idx != -1
-        ]
+        # FAISS IndexFlatIP tidak mendukung penyaringan bawaan, jadi saat filter
+        # aktif hasilnya diambil lebih banyak lalu disaring. Tanpa ini, filter
+        # dokumen bisa menyisakan kandidat yang terlalu sedikit.
+        fetch = top_n if allowed is None else min(top_n * 5, self.index.ntotal)
+        scores, indices = self.index.search(query_vector, min(fetch, self.index.ntotal))
 
-    def lexical_search(self, query: str, top_n: int):
-        """Cari lewat BM25."""
+        hasil: list[tuple[int, float]] = []
+        for score, idx in zip(scores[0], indices[0]):
+            if idx == -1:
+                continue
+            doc_id = int(idx)
+            if allowed is not None and doc_id not in allowed:
+                continue
+            hasil.append((doc_id, float(score)))
+            if len(hasil) >= top_n:
+                break
+        return hasil
+
+    def lexical_search(self, query: str, top_n: int, allowed: set[int] | None = None):
+        """Cari lewat BM25, dengan penyaringan dokumen opsional."""
         if self.lexical_index is None:
             return []
-        return self.lexical_index.search(query, top_n=top_n)
+
+        fetch = top_n if allowed is None else top_n * 5
+        hits = self.lexical_index.search(query, top_n=fetch)
+        if allowed is not None:
+            hits = [h for h in hits if h.doc_id in allowed]
+        return hits[:top_n]
 
     def dense_scores_for(
         self,
@@ -367,17 +424,19 @@ class HybridRetriever:
         started = time.perf_counter()
         from app.llm_client import get_query_embedding
 
+        allowed = self.allowed_doc_ids(cfg.document_filter)
+
         query_embedding = get_query_embedding(
             effective_query,
             task_type=self.embedding_task_type,
             api_key=api_key,
         )
-        dense_hits = self.dense_search(query_embedding, cfg.dense_candidates)
+        dense_hits = self.dense_search(query_embedding, cfg.dense_candidates, allowed)
         timings["dense_ms"] = (time.perf_counter() - started) * 1000
 
         started = time.perf_counter()
         lexical_hits = (
-            self.lexical_search(effective_query, cfg.lexical_candidates)
+            self.lexical_search(effective_query, cfg.lexical_candidates, allowed)
             if cfg.use_hybrid else []
         )
         timings["lexical_ms"] = (time.perf_counter() - started) * 1000
@@ -530,6 +589,7 @@ class HybridRetriever:
                 page_numbers=meta.get("page_numbers", []),
                 section_title=meta.get("section_title", ""),
                 heading_path=meta.get("heading_path", []) or [],
+                source_document=meta.get("source_document", ""),
                 dense_score=dense_by_id.get(doc_id, 0.0),
                 dense_rank=dense_rank_by_id.get(doc_id),
                 lexical_score=lexical_hit.score if lexical_hit else 0.0,
@@ -619,6 +679,7 @@ class HybridRetriever:
                 page_numbers=meta.get("page_numbers", []),
                 section_title=meta.get("section_title", ""),
                 heading_path=meta.get("heading_path", []) or [],
+                source_document=meta.get("source_document", ""),
                 dense_score=score,
                 dense_rank=rank,
                 final_rank=rank,
@@ -630,6 +691,23 @@ class HybridRetriever:
         return self.index.ntotal if self.index else 0
 
     @property
+    def source_documents(self) -> list[str]:
+        """
+        Nama dokumen yang ada di dalam index, terurut.
+
+        Index dokumen tunggal versi lama tidak menyimpan ``source_document``,
+        sehingga daftarnya kosong dan UI menyembunyikan pemilih dokumen.
+        """
+        if not self.metadata:
+            return []
+        nama = {
+            meta.get("source_document", "")
+            for meta in self.metadata
+            if meta.get("source_document")
+        }
+        return sorted(nama)
+
+    @property
     def document_info(self) -> dict:
         """Ringkasan dokumen yang terindeks, untuk ditampilkan di UI."""
         if not self.metadata:
@@ -637,11 +715,20 @@ class HybridRetriever:
 
         all_pages: set[int] = set()
         all_sections: set[str] = set()
+        per_document: dict[str, dict] = {}
+
         for meta in self.metadata:
-            all_pages.update(meta.get("page_numbers", []))
+            pages = meta.get("page_numbers", [])
+            all_pages.update(pages)
+
             section = meta.get("section_title", "")
             if section:
                 all_sections.add(section)
+
+            nama = meta.get("source_document", "")
+            entri = per_document.setdefault(nama, {"chunks": 0, "pages": set()})
+            entri["chunks"] += 1
+            entri["pages"].update(pages)
 
         page_spans = [len(meta.get("page_numbers", [])) for meta in self.metadata]
 
@@ -654,11 +741,30 @@ class HybridRetriever:
             "avg_pages_per_chunk": (
                 round(sum(page_spans) / len(page_spans), 2) if page_spans else 0
             ),
+            "documents": [
+                {"name": nama or "(tanpa nama)",
+                 "chunks": data["chunks"],
+                 "pages": len(data["pages"])}
+                for nama, data in sorted(per_document.items())
+            ],
+            "total_documents": len(per_document),
         }
         if self.lexical_index:
             info["lexical"] = self.lexical_index.stats()
         info["index_info"] = self.index_info
         return info
+
+    def freshness(self):
+        """
+        Periksa apakah index masih sesuai dengan dokumen sumbernya.
+
+        Delegasi ke `app.index_status`, memakai catatan hash yang ditulis saat
+        build. Tanpa pemeriksaan ini, PDF yang diperbarui akan dijawab dari
+        index lama tanpa peringatan apa pun.
+        """
+        from app.index_status import check_index_freshness
+
+        return check_index_freshness(self.index_info)
 
 
 #: Nama lama yang masih dipakai UI dan evaluasi.
@@ -682,16 +788,24 @@ def format_sources(results: list[RetrievalCandidate]) -> str:
     if not results:
         return ""
 
+    # Nama dokumen hanya ditampilkan bila konteksnya memang berasal dari
+    # lebih dari satu dokumen. Pada index dokumen tunggal, menyebutkannya
+    # setiap kali hanya menambah keriuhan.
+    banyak_dokumen = len({r.source_document for r in results if r.source_document}) > 1
+
     lines: list[str] = []
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str]] = set()
 
     for result in results:
-        key = (result.page_label, result.heading_label)
+        key = (result.source_document, result.page_label, result.heading_label)
         if key in seen:
             continue
         seen.add(key)
 
-        source = f"📄 Halaman {result.page_label}"
+        source = "📄 "
+        if banyak_dokumen and result.document_label:
+            source += f"{result.document_label} · "
+        source += f"Halaman {result.page_label}"
         if result.heading_label:
             source += f" — *{result.heading_label}*"
         source += f" (relevansi: {result.display_score:.0%})"

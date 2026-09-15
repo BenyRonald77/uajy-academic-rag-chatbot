@@ -232,6 +232,7 @@ def evaluate_preset(
     preset_name: str,
     api_key: str | None = None,
     verbose: bool = True,
+    delay: float = 0.0,
 ) -> tuple[list[QuestionResult], dict]:
     """
     Jalankan seluruh pertanyaan uji pada satu konfigurasi retrieval.
@@ -257,7 +258,14 @@ def evaluate_preset(
 
     results: list[QuestionResult] = []
 
-    for question in questions:
+    for position, question in enumerate(questions):
+        # Beri jeda antar pertanyaan bila diminta. Menjalankan tiga
+        # konfigurasi secara berurutan berarti puluhan panggilan API dalam
+        # hitungan detik, dan pada kuota gratis reranker-lah yang pertama
+        # terkena rate limit — tepat di tahap yang menjadi gate penolakan.
+        if delay and position:
+            time.sleep(delay)
+
         outcome, latency_ms = _retrieve_with_retry(
             retriever, question, config, api_key
         )
@@ -424,6 +432,7 @@ def run_full_evaluation(
     api_key: str | None = None,
     skip_conversational: bool = False,
     verbose: bool = True,
+    delay: float = 0.0,
 ) -> dict:
     """Jalankan evaluasi untuk seluruh konfigurasi yang diminta."""
     print("=" * 74)
@@ -459,7 +468,8 @@ def run_full_evaluation(
             config = config.with_overrides(use_query_rewrite=True)
 
         results, metrics = evaluate_preset(
-            retriever, questions, config, mode, api_key=api_key, verbose=verbose
+            retriever, questions, config, mode,
+            api_key=api_key, verbose=verbose, delay=delay,
         )
         all_results[mode] = [r.to_dict() for r in results]
         all_metrics[mode] = metrics
@@ -512,6 +522,15 @@ def main() -> None:
         action="store_true",
         help="Hanya cetak ringkasan, tanpa rincian per pertanyaan",
     )
+    parser.add_argument(
+        "--delay",
+        type=float,
+        default=0.0,
+        metavar="DETIK",
+        help="Jeda antar pertanyaan. Pada kuota gratis, gunakan 2 agar "
+             "reranker tidak terkena rate limit (yang membuat angka "
+             "penolakan tidak sahih).",
+    )
     args = parser.parse_args()
 
     modes = args.mode or PRESET_ORDER
@@ -530,6 +549,7 @@ def main() -> None:
             api_key=args.api_key,
             skip_conversational=args.skip_conversational,
             verbose=not args.quiet,
+            delay=args.delay,
         )
     except FileNotFoundError as e:
         print(f"❌ {e}")

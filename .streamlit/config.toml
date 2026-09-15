@@ -1,7 +1,9 @@
 [theme]
-base = "dark"
-primaryColor = "#1fb4b6"
-backgroundColor = "#0e1315"
-secondaryBackgroundColor = "#161c1e"
-textColor = "#e4ecea"
+# Selaras dengan app/theme.py, yang mengikuti bahasa desain portal akademik
+# kampus: latar biru sangat muda, kartu putih, aksen cyan.
+base = "light"
+primaryColor = "#1B9DC4"
+backgroundColor = "#F2F9FC"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#2F4858"
 font = "sans serif"

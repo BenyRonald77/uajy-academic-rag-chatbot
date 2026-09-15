@@ -49,9 +49,22 @@ _PAGE_NUMBER_RES = (
 _WORD_RE = re.compile(r"[A-Za-z]+")
 _VOWELS = frozenset("aeiou")
 
-#: Digraf Bahasa Indonesia yang secara fonetis berperan sebagai satu konsonan,
-#: sehingga tidak boleh dihitung sebagai gugus konsonan tak wajar.
-_DIGRAPHS = ("ng", "ny", "sy", "kh", "th", "ch")
+#: Gugus konsonan yang sah dalam Bahasa Indonesia dan kata serapannya,
+#: diperlakukan sebagai satu konsonan saat menilai kewajaran sebuah kata.
+#:
+#: Daftar ini bukan sekadar digraf fonetis. Tanpa "str" di dalamnya, kosakata
+#: akademik yang paling sering dipakai dokumen ini justru dinilai tak wajar:
+#: adminis-tra-si, s-truk-tur, ins-truk-si, herregis-tra-si. Satu baris yang
+#: didominasi kata semacam itu akan terbuang sebagai teks rusak.
+#:
+#: Urutannya penting — gugus tiga huruf harus diganti sebelum yang dua huruf.
+_CONSONANT_CLUSTERS = (
+    "str", "spr", "skr",
+    "ng", "ny", "sy", "kh", "th", "ch",
+    "tr", "dr", "kr", "gr", "br", "pr",
+    "kl", "gl", "bl", "pl", "fl",
+    "st", "sp", "sk", "sl", "sm", "sn",
+)
 
 #: Minimum karakter alfanumerik agar sebuah baris dianggap membawa informasi.
 _MIN_ALNUM_PER_LINE = 3
@@ -121,12 +134,14 @@ def _longest_consonant_run(word: str) -> int:
     """
     Panjang gugus konsonan terpanjang dalam sebuah kata.
 
-    Bahasa Indonesia hampir tidak pernah memiliki tiga konsonan berurutan di
-    luar digraf, jadi angka tinggi menandakan teks rusak ("lratsrutkurts").
+    Setelah gugus yang sah diperlakukan sebagai satu konsonan, Bahasa
+    Indonesia hampir tidak pernah menyisakan tiga konsonan berurutan. Angka
+    tinggi menandakan teks rusak seperti "lratsrutkurts", di mana gugusnya
+    ("tsr", "rts") memang tidak pernah muncul dalam kata sungguhan.
     """
     lowered = word.lower()
-    for digraph in _DIGRAPHS:
-        lowered = lowered.replace(digraph, "c")
+    for cluster in _CONSONANT_CLUSTERS:
+        lowered = lowered.replace(cluster, "c")
 
     longest = run = 0
     for char in lowered:

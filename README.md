@@ -6,10 +6,11 @@
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit 1.49](https://img.shields.io/badge/Streamlit-1.49-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://streamlit.io/)
-[![Google Gemini](https://img.shields.io/badge/LLM-Gemini%202.5%20Flash-4285F4?style=flat-square&logo=google&logoColor=white)](https://aistudio.google.com/)
+[![Google Gemini](https://img.shields.io/badge/LLM-Gemini%203.6%20Flash-4285F4?style=flat-square&logo=google&logoColor=white)](https://aistudio.google.com/)
 [![Gemini Embedding](https://img.shields.io/badge/Embedding-gemini--embedding--001-blue?style=flat-square)](https://ai.google.dev/)
 [![Hybrid Retrieval](https://img.shields.io/badge/Retrieval-Hybrid%20BM25%20%2B%20Dense%20(RRF)-8E44AD?style=flat-square)](#-hybrid-retrieval-pipeline)
 [![FAISS](https://img.shields.io/badge/Vector%20Store-FAISS%20CPU-26A69A?style=flat-square)](https://github.com/facebookresearch/faiss)
+[![Tests](https://img.shields.io/badge/tests-375%20passing-2ea44f?style=flat-square)](#-testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
 [Bahasa Indonesia](#-ringkasan-proyek) · [English](#-overview)
@@ -26,7 +27,7 @@
 
 **UAJY Academic Document RAG Chatbot** is a production-grade **Retrieval-Augmented Generation (RAG)** assistant engineered to provide verified, hallucination-free answers to students and faculty members based on the official academic handbook (*Buku Pedoman Akademik Fakultas Teknologi Industri Universitas Atma Jaya Yogyakarta 2025/2026*).
 
-Unlike generic language models that are prone to hallucinating administrative deadlines or degree requirements, this system separates **knowledge retrieval** (lightweight local FAISS similarity search) from **response generation** (Google Gemini 2.5 Flash via API), enforcing strict ground-truth citation and explicit refusal for out-of-scope inquiries.
+Unlike generic language models that are prone to hallucinating administrative deadlines or degree requirements, this system separates **knowledge retrieval** (lightweight local FAISS similarity search) from **response generation** (Google Gemini via API), enforcing strict ground-truth citation and explicit refusal for out-of-scope inquiries.
 
 ---
 
@@ -36,11 +37,14 @@ Unlike generic language models that are prone to hallucinating administrative de
 - 🎚️ **LLM Reranker:** A listwise reranker scores every candidate on whether it can actually *answer* the question, not merely resemble it. Measured impact: **MRR 0.858 → 1.000**.
 - 💬 **History-Aware Query Rewriting:** Follow-ups like *"berapa maksimalnya?"* are rewritten into standalone questions **before** retrieval runs, so the right context is fetched in the first place.
 - 🎯 **Strict Document Grounding:** Answers are generated **exclusively** from retrieved PDF context chunks.
-- 📑 **Precise Source Citations:** Chunks are built with per-line page tracking, so **76% of chunks cite a single page** (average 1.29 pages per chunk).
+- 📑 **Precise Source Citations:** Chunks are built with per-line page tracking, so **77% of chunks cite a single page** (average 1.28 pages per chunk).
 - 🛡️ **Layered Anti-Hallucination Guardrails:** Similarity floor → IDF-weighted lexical coverage → reranker gate → strict system prompt. Out-of-scope refusal is **100%** in the full configuration.
 - 🧹 **Extraction Noise Filtering:** Rotated org-chart diagrams and broken font encodings produce garbage text that would otherwise compete for top-k slots. 24% of raw lines are filtered at ingestion.
-- 🔍 **Interactive Document Explorer:** Search, filter, and inspect all 219 indexed chunks with their hierarchical section paths.
+- 📚 **Multi-Document Index:** One index spans many campus documents. Every chunk records its source, because "page 48" means something different in the academic handbook than in a rector's decree. Per-document search filter included.
+- 🕒 **Stale Index Detection:** Each document's SHA-256 is recorded at build time and re-checked on startup. When a source PDF is updated, the app says so instead of quietly answering from last year's edition.
+- 🔍 **Interactive Document Explorer:** Search, filter, and inspect all 222 indexed chunks with their hierarchical section paths.
 - 📊 **Ablation Study, Not Just a Benchmark:** Compare dense-only vs hybrid vs hybrid+rerank on page-level relevance, MRR, refusal accuracy, and false-refusal rate.
+- 🧪 **375 Tests, No API Key Required:** Every pure-logic module is covered, including regression guards for six real bugs found by measurement. CI runs on every push.
 - 🌙 **Editorial Dark Theme UI:** Modern, clean, high-contrast dark interface built with Streamlit and tailored CSS design tokens.
 
 ---
@@ -104,7 +108,7 @@ Unlike generic language models that are prone to hallucinating administrative de
                                      ▼
                          ┌───────────────────────┐
                          │ Prompt Builder        │
-                         │ + Gemini 2.5 Flash    │
+                         │ + Gemini 3.6 Flash    │
                          └───────────┬───────────┘
                                      ▼
                          ┌───────────────────────┐
@@ -139,8 +143,9 @@ No single similarity threshold can separate them. The inherited `0.30` threshold
 | Layer | Technology | Purpose |
 |---|---|---|
 | **Frontend UI** | [Streamlit](https://streamlit.io/) 1.32+ | Chat interface, document explorer, retrieval debug panel |
-| **LLM Generation** | [Google Gemini 2.5 Flash](https://ai.google.dev/) | High-speed, context-rich reasoning in Indonesian & English |
+| **LLM Generation** | [Google Gemini 3.6 Flash](https://ai.google.dev/) | High-speed, context-rich reasoning in Indonesian & English |
 | **Rerank & Rewrite** | [Gemini 3.5 Flash Lite](https://ai.google.dev/) | Listwise reranking and query rewriting (zero thinking tokens) |
+| **Model Resilience** | Configurable fallback chain | Retired models degrade to the next available one instead of erroring |
 | **Embeddings** | [gemini-embedding-001](https://ai.google.dev/) | 3072-dim multilingual vectors, task-type aware |
 | **Dense Search** | [FAISS (CPU)](https://github.com/facebookresearch/faiss) | `IndexFlatIP` cosine similarity over normalised vectors |
 | **Lexical Search** | BM25 Okapi (in-house) | Exact-term matching, built in-memory at startup — no extra artifact, no dependency |
@@ -157,12 +162,15 @@ ChatBot RAG kampus/
 ├── .streamlit/
 │   ├── config.toml           # Streamlit dark theme configuration
 │   └── secrets.toml          # Secret API keys (excluded from git)
+├── .github/workflows/
+│   └── tests.yml             # CI: pytest on Python 3.11 & 3.12, no API key needed
 ├── app/
 │   ├── __init__.py
 │   ├── config.py             # Central config: models + RetrievalConfig dataclass
 │   ├── cli_utils.py          # UTF-8 stdout for Windows terminals
 │   ├── text_utils.py         # Indonesian tokenizer, stopwords, domain aliases
 │   ├── lexical_index.py      # BM25 Okapi + IDF-weighted lexical coverage
+│   ├── index_status.py       # Stale-index detection via document hashes
 │   ├── llm_client.py         # Gemini wrapper (Streamlit-independent) + embed cache
 │   ├── query_rewriter.py     # History-aware follow-up rewriting
 │   ├── reranker.py           # Listwise LLM reranker
@@ -177,11 +185,17 @@ ChatBot RAG kampus/
 ├── eval/
 │   ├── __init__.py
 │   ├── test_questions.json   # 22 questions w/ verified page-level ground truth
-│   ├── run_eval.py           # Ablation study runner
+│   ├── run_eval.py           # Retrieval ablation study runner
+│   ├── answer_eval.py        # Groundedness, citation, and refusal checks
+│   ├── run_answer_eval.py    # Answer-level evaluation runner
 │   └── eval_results.json     # Generated metrics + per-question detail
+├── tests/                    # 375 tests, no API key required
+│   ├── conftest.py
+│   ├── test_regressions.py   # Guards for six real bugs
+│   └── test_*.py             # Per-module unit tests
 ├── index/
 │   ├── README.md
-│   ├── faiss.index           # Persisted FAISS index (219 vectors, 3072-dim)
+│   ├── faiss.index           # Persisted FAISS index (222 vectors, 3072-dim)
 │   ├── metadata.json         # Chunk text, page range, heading path
 │   └── index_info.json       # Build provenance: PDF hash, model, task type
 ├── ingestion/
@@ -228,8 +242,11 @@ python ingestion/build_index.py --dry-run
 Then build for real. The `--yes` flag is required because building overwrites the existing index and consumes embedding quota:
 
 ```bash
-python ingestion/build_index.py --yes
+python ingestion/build_index.py --yes                     # every PDF in data/
+python ingestion/build_index.py --pdf data/a.pdf --yes    # specific documents
 ```
+
+Drop additional PDFs into `data/` and rebuild — one index holds them all, and each chunk remembers which document it came from.
 
 ### 4. Run the Streamlit Web Application
 
@@ -260,7 +277,9 @@ Measured on 22 questions — 17 in-scope with verified page-level ground truth, 
 | **Refusal accuracy** (out-of-scope) | 0.0% | 0.0% | **100.0%** |
 | **False refusal rate** ↓ | 0.0% | 0.0% | **0.0%** |
 | **Conversational recall** | 100.0% | 100.0% | **100.0%** |
-| **Avg latency** ↓ | 707 ms | 638 ms | 2029 ms |
+| **Avg latency** ↓ | 689 ms | 598 ms | 1899 ms |
+
+> On a free-tier key, add `--delay 2`. Running three configurations back to back issues dozens of calls within seconds, and the reranker is the first thing rate-limited — precisely the stage that acts as the refusal gate. The suite counts and reports reranker failures rather than letting them quietly deflate the refusal figure.
 
 **MRR 1.000 means the correct page ranked first for every single in-scope question.** That is what the reranker buys: hybrid fusion alone widens the candidate pool but does not order it perfectly, and it even displaced one answer (Q2, the `144 SKS` question, dropping recall to 94.1%). The reranker recovered it and put it at rank 1.
 
@@ -291,9 +310,73 @@ Page-precision is a prerequisite for trustworthy citations, so it is measured to
 | Metric | Before | After |
 |---|---|---|
 | Max pages claimed by one chunk | 13 | **4** |
-| Avg pages per chunk | 1.99 | **1.29** |
-| Chunks citing a single page | — | **76%** (166/219) |
+| Avg pages per chunk | 1.99 | **1.28** |
+| Chunks citing a single page | — | **77%** (170/222) |
 | Chunks carrying a section heading | — | **100%** |
+
+---
+
+## 🔬 Answer-Level Evaluation
+
+Retrieval metrics stop halfway. The two largest claims of this project live on the generation side, so they get their own suite:
+
+```bash
+python eval/run_answer_eval.py --delay 3          # full run
+python eval/run_answer_eval.py --limit 6          # sample, saves quota
+python eval/run_answer_eval.py --no-judge         # citations + refusal only
+```
+
+| Metric | What it measures | How |
+|---|---|---|
+| **Groundedness** | Is every factual claim supported by the retrieved context? | LLM-as-judge, 0–10, pass ≥ 7 |
+| **Citation validity** | Do the page numbers *written in the answer* come from the context? | Deterministic parser |
+| **Citation precision** | What share of cited pages are legitimate? | Deterministic parser |
+| **Refusal (end-to-end)** | Does the final answer actually refuse, not just the retrieval gate? | Refusal markers from the system prompt |
+| **False refusal** | Are answerable questions being refused? | Same, inverted |
+
+Everything except groundedness is rule-based and unit-tested, so only the one metric that genuinely needs language understanding depends on a model.
+
+The suite is also **honest about its own failures**: API errors are never allowed to pass as answers, and judge failures are counted separately rather than averaged in. This matters more than it sounds — see below.
+
+> **Published figures pending.** The daily API quota was exhausted while fixing two measurement bugs this suite surfaced (details below), so the clean full-run numbers are not yet in. What is established: groundedness scored 10.0/10 on every answer judged, and end-to-end refusal was 5/5 on out-of-scope questions.
+
+### What this suite caught about itself
+
+Both findings were bugs in the *evaluation code*, not the chatbot — and both would have produced flattering numbers:
+
+**API errors scored as perfect answers.** `call_llm` returns a friendly message on failure, which is right for the chat UI. The eval treated one such message as a real answer, and the groundedness judge awarded it **10/10** — an error message makes no unsupported factual claims, after all. Fixed by adding `raise_on_error=True` for eval callers and excluding generation failures from every metric.
+
+**A section title read as a page range.** The mandated citation format is `Halaman X — [Nama Bagian]`, and section titles frequently begin with a number:
+
+```
+📄 Sumber: Halaman 43 — 5. Beban studi dan beban kredit semester
+```
+
+The extractor read `43 — 5` as a range and harvested `5` as a cited page, reporting a fabricated citation the model never made. Replaced the regex with a forward parser that stops at a dash unless it is followed by a larger number. The exact string above is now a regression test.
+
+---
+
+## 🧪 Testing
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+375 tests, ~1.5 seconds, **no API key and no index required** — every test is self-contained, so CI runs safely on forks and pull requests.
+
+Coverage is concentrated where bugs actually appeared. Six regression guards protect real failures found by measurement, not imagined ones:
+
+| Bug | Symptom | Guard |
+|---|---|---|
+| Roman-numeral regex matched Indonesian words | `di` treated as a numeral, escaping the stopword filter into the BM25 index | `test_regressions.py::TestRomanNumeralFalsePositive` |
+| Overlap leaked page boundaries | One chunk claimed 13 pages despite a 3-page cap, making citations useless | `TestChunkPageSpanLeak` |
+| Gibberish filter flagged course codes | `TID 1101 Kalkulus I 3 SKS` discarded as broken text, deleting curriculum tables | `TestGibberishFilterFalsePositive` |
+| Valid `str` cluster judged unnatural | `administrasi`, `struktur`, `instruksi`, `herregistrasi` at risk of being filtered out | `test_extract_text.py::TestConsonantRun` |
+| Rerank gate failed **open** | Refusal accuracy silently dropped 100% → 0% under rate limits, with no error | `TestRerankGateFailOpen` |
+| Section title parsed as page range | Fabricated citations reported in the eval | `test_answer_eval.py` |
+
+The rerank one deserves emphasis. Its fail-safe returned candidates with `rerank_score=None`, and the gate's `score is None or score >= threshold` check let every one of them through. A busy API therefore disabled the anti-hallucination gate without a single log line. The fix reports success explicitly, scores unmentioned candidates as `0`, retries transient errors, and surfaces failures in both the UI and the eval report.
 
 ---
 
@@ -316,6 +399,15 @@ Dari 22 pertanyaan uji, konfigurasi lengkap mencapai **MRR 1,000** — halaman y
 
 ### Panel Debug
 Setiap jawaban dilengkapi rincian retrieval yang bisa dibuka: skor dense, BM25, RRF, dan reranker per kandidat, jalur mana yang menemukannya, keputusan gate relevansi, serta latensi tiap tahap. Tujuannya agar proses retrieval bisa diaudit, bukan menjadi kotak hitam.
+
+### Banyak Dokumen dalam Satu Index
+Kampus punya lebih dari satu sumber resmi: pedoman akademik, kalender akademik, SK Rektor. Cukup letakkan PDF-nya di folder `data/` lalu bangun ulang index. Setiap chunk mencatat dokumen asalnya, sebab nomor halaman hanya bermakna dalam konteks dokumennya — "halaman 48" pada pedoman akademik dan pada SK Rektor merujuk hal yang sama sekali berbeda. Pencarian juga bisa dibatasi ke dokumen tertentu lewat sidebar.
+
+### Peringatan Index Usang
+Hash setiap dokumen dicatat saat index dibangun, lalu diperiksa ulang setiap aplikasi dimuat. Kalau PDF sumbernya diperbarui, aplikasi memberi tahu bahwa index perlu dibangun ulang. Tanpa pemeriksaan ini, chatbot akan terus menjawab dari dokumen edisi lama dengan sitasi yang tampak sah — kegagalan yang paling sulit disadari pengguna.
+
+### Pengujian
+375 test berjalan tanpa API key dan tanpa index, selesai dalam sekitar 1,5 detik. Enam di antaranya adalah penjaga terhadap bug yang benar-benar pernah terjadi dan ditemukan lewat pengukuran, termasuk gate reranker yang dulu gagal-terbuka sehingga penolakan diam-diam jatuh dari 100% ke 0% saat API sibuk. Jalankan dengan `python -m pytest`.
 
 ---
 
