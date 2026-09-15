@@ -15,7 +15,7 @@ import pytest
 from app.config import RetrievalConfig
 from app.reranker import rerank_candidates
 from app.text_utils import ROMAN_NUMERALS, tokenize
-from ingestion.chunking import MAX_PAGES_PER_CHUNK, chunk_pages
+from ingestion.chunking import MAX_PAGES_PER_CHUNK, _detect_heading, chunk_pages
 from ingestion.extract_text import _is_gibberish
 
 
@@ -150,6 +150,123 @@ class TestGibberishFilterFalsePositive:
         )
 
 
+class TestFragmentPromotedToHeading:
+    """
+    Bug: potongan akhir kalimat terangkat menjadi judul bagian.
+
+    Aturan "baris berhuruf kapital adalah judul" juga menangkap sisa kalimat
+    yang terpotong, misalnya "... Universitas Atma Jaya Yogyakarta (UAJY)."
+    menyisakan baris "UAJY).". Pengukuran pada dokumen ini menemukan tiga
+    pecahan semacam itu mencemari **68 dari 222 chunk (31%)**, sehingga hampir
+    sepertiga sitasi menampilkan label bagian tak bermakna seperti
+    ``UAJY). › G. Herregistrasi › H. Cuti Studi``.
+
+    Sitasi yang bisa diperiksa adalah nilai utama chatbot ini, jadi label yang
+    kacau merusak justru bagian yang paling penting.
+    """
+
+    @pytest.mark.parametrize("fragment", [
+        "UAJY).",
+        "PKKMB).",
+        "AB-PUI",
+        "FTI).",
+        "SKS).",
+    ])
+    def test_pecahan_kalimat_ditolak(self, fragment):
+        assert _detect_heading(fragment) is None, (
+            f"pecahan {fragment!r} tidak boleh dianggap judul"
+        )
+
+    @pytest.mark.parametrize("heading", [
+        "PERPUSTAKAAN",
+        "KATA PENGANTAR",
+        "DAFTAR ISI",
+        "SEJARAH SINGKAT",
+        "PENYELENGGARAAN PENDIDIKAN",
+        "UNIVERSITAS ATMA JAYA YOGYAKARTA",
+        "VISI - MISI",
+    ])
+    def test_judul_sungguhan_tetap_dikenali(self, heading):
+        hasil = _detect_heading(heading)
+        assert hasil is not None, f"judul sah {heading!r} ikut tersaring"
+        assert hasil[0] == 0
+
+    def test_tanda_kurung_berpasangan_tetap_lolos(self):
+        """Judul yang memuat kurung lengkap bukan pecahan kalimat."""
+        assert _detect_heading("PROGRAM STUDI (REGULER) TEKNIK INDUSTRI") is not None
+
+    def test_huruf_kapital_berangka_bukan_judul(self):
+        """
+        Batasan yang diketahui, bukan kelalaian.
+
+        Aturan huruf kapital tidak menerima angka, sehingga "KURIKULUM 2025"
+        tidak dikenali sebagai judul. Melonggarkannya berisiko menarik baris
+        tabel berhuruf kapital masuk sebagai judul, dan itu perlu diukur lebih
+        dulu. Nomor bab dan lampiran sendiri sudah ditangani pola tersendiri.
+        """
+        assert _detect_heading("KURIKULUM 2025") is None
+        assert _detect_heading("BAB IV") is not None
+        assert _detect_heading("LAMPIRAN 2") is not None
+
+    @pytest.mark.parametrize("heading", ["BAB I", "BAB XII", "Pasal 1"])
+    def test_heading_struktural_tidak_kena_ambang_huruf(self, heading):
+        """
+        Ambang jumlah huruf hanya berlaku pada aturan huruf kapital.
+
+        "BAB I" hanya punya empat huruf tetapi dikenali lewat pola tersendiri,
+        jadi tidak boleh ikut tersaring.
+        """
+        assert _detect_heading(heading) is not None
+
+
+class TestPipelineVersionStaleness:
+    """
+    Bug: index usang karena perubahan kode tidak terdeteksi.
+
+    `index_info.json` mencatat parameter chunking, tetapi parameter saja tidak
+    cukup. Ketika daftar gugus konsonan yang sah diperbaiki, jumlah chunk
+    berubah dari 219 menjadi 222 tanpa satu pun angka parameter berubah —
+    index lama tetap terpakai dan satu-satunya cara mengetahuinya adalah
+    mengukur manual.
+    """
+
+    def test_versi_lebih_lama_menandai_usang(self, tmp_path):
+        from app.config import INGESTION_PIPELINE_VERSION
+        from app.index_status import check_index_freshness
+
+        info = {
+            "pipeline_version": INGESTION_PIPELINE_VERSION - 1,
+            "source_documents": [],
+        }
+        freshness = check_index_freshness(info, tmp_path)
+
+        assert freshness.pipeline_outdated is True
+        assert freshness.is_stale is True
+        assert any("pipeline" in m.lower() for m in freshness.messages())
+
+    def test_versi_sama_tidak_menandai_usang(self, tmp_path):
+        from app.config import INGESTION_PIPELINE_VERSION
+        from app.index_status import check_index_freshness
+
+        info = {
+            "pipeline_version": INGESTION_PIPELINE_VERSION,
+            "source_documents": [],
+        }
+        freshness = check_index_freshness(info, tmp_path)
+
+        assert freshness.pipeline_outdated is False
+        assert freshness.is_stale is False
+
+    def test_index_tanpa_versi_dianggap_versi_nol(self, tmp_path):
+        """Index lama belum menyimpan nomor versi apa pun."""
+        from app.index_status import check_index_freshness
+
+        freshness = check_index_freshness({"source_documents": []}, tmp_path)
+
+        assert freshness.indexed_pipeline_version == 0
+        assert freshness.pipeline_outdated is True
+
+
 class TestRetiredModelFallback:
     """
     Bug: model yang dihapus penyedianya memunculkan 404 mentah ke pengguna.
@@ -222,12 +339,17 @@ class TestRetiredModelFallback:
         )
         assert llm_client.effective_model("gemini-3.6-flash") != "gemini-3.6-flash"
 
-    def test_galat_kuota_tidak_memicu_perpindahan(self, monkeypatch):
+    def test_kuota_habis_memicu_perpindahan(self, monkeypatch):
         """
-        Batas kuota berlaku pada akun, bukan pada model.
+        Kuota tingkat gratis berlaku PER MODEL, bukan per akun.
 
-        Berpindah model tidak menolong dan hanya menghabiskan sisa kuota lebih
-        cepat, jadi galat 429 harus diteruskan apa adanya.
+        Ini koreksi atas asumsi awal. Pesan galat API menyatakannya eksplisit::
+
+            limit: 20, model: gemini-3.6-flash
+            quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier
+
+        Karena batasnya per model dan hanya 20 permintaan per hari, menyebar
+        beban ke model cadangan benar-benar menambah kapasitas.
         """
         from app import llm_client
 
@@ -235,14 +357,41 @@ class TestRetiredModelFallback:
 
         def palsu(*, model, **kwargs):
             dipanggil.append(model)
-            raise RuntimeError("429 RESOURCE_EXHAUSTED. You exceeded your quota")
+            if model == "gemini-3.6-flash":
+                raise RuntimeError(
+                    "429 RESOURCE_EXHAUSTED. Quota exceeded for metric: "
+                    "generate_content_free_tier_requests, limit: 20"
+                )
+            return "jawaban dari model cadangan"
 
         monkeypatch.setattr(llm_client, "_generate_once", palsu)
 
-        with pytest.raises(RuntimeError, match="429"):
+        hasil = llm_client.call_llm("pertanyaan", raise_on_error=True)
+
+        assert hasil == "jawaban dari model cadangan"
+        assert len(dipanggil) >= 2, "kuota habis per-model harus memicu model lain"
+
+    def test_galat_autentikasi_tidak_memicu_perpindahan(self, monkeypatch):
+        """
+        Galat yang bukan soal model tidak akan membaik dengan berpindah.
+
+        API key yang salah tetap salah untuk model apa pun, jadi mencoba
+        seluruh rantai hanya menunda pesan galat yang benar.
+        """
+        from app import llm_client
+
+        dipanggil: list[str] = []
+
+        def palsu(*, model, **kwargs):
+            dipanggil.append(model)
+            raise RuntimeError("400 INVALID_ARGUMENT. API key not valid")
+
+        monkeypatch.setattr(llm_client, "_generate_once", palsu)
+
+        with pytest.raises(RuntimeError, match="400"):
             llm_client.call_llm("pertanyaan", raise_on_error=True)
 
-        assert len(dipanggil) == 1, "kuota habis tidak boleh memicu percobaan model lain"
+        assert len(dipanggil) == 1
 
     def test_seluruh_rantai_gagal_melempar_galat_terakhir(self, monkeypatch):
         from app import llm_client

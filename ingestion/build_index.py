@@ -43,6 +43,7 @@ from app.config import (
     DATA_DIR,
     EMBEDDING_MODEL,
     INDEX_DIR,
+    INGESTION_PIPELINE_VERSION,
     MIN_CHUNK_SIZE,
 )
 from app.index_status import file_sha256
@@ -164,6 +165,11 @@ def build_index_info(
         # Retriever membaca kunci ini untuk memilih task type saat meng-embed
         # pertanyaan. Query dan dokumen wajib memakai task type yang cocok.
         "embedding_task_type": task_type,
+        # Versi logika pipeline, bukan hanya parameternya. Perubahan aturan
+        # ekstraksi atau chunking mengubah hasil tanpa mengubah angka
+        # parameter apa pun, sehingga index usang tidak akan terdeteksi bila
+        # yang dicatat hanya parameter.
+        "pipeline_version": INGESTION_PIPELINE_VERSION,
         "chunking": {
             "chunk_size": CHUNK_SIZE,
             "chunk_overlap": CHUNK_OVERLAP,

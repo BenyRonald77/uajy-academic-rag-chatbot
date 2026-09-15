@@ -1,12 +1,12 @@
 {
-  "built_at": "2026-09-14T08:12:11+00:00",
+  "built_at": "2026-09-15T01:45:53+00:00",
   "source_documents": [
     {
       "name": "Buku-Pedoman-Akademik-Fakultas-Teknologi-Industri-2025-2026.pdf",
       "sha256": "0c2dfd05681978bc2bf9f2ec05c33e5e249d6857cde174d116f4a8085d8c25e5",
       "size_bytes": 66122322,
       "pages_with_text": 83,
-      "chunks": 222,
+      "chunks": 218,
       "extraction": {
         "lines_raw": 5518,
         "lines_kept": 4206,
@@ -59,6 +59,7 @@
     "includes_heading_path": true
   },
   "embedding_task_type": "RETRIEVAL_DOCUMENT",
+  "pipeline_version": 3,
   "chunking": {
     "chunk_size": 1400,
     "chunk_overlap": 250,
@@ -67,11 +68,11 @@
   },
   "stats": {
     "total_documents": 1,
-    "total_chunks": 222,
+    "total_chunks": 218,
     "total_pages": 78,
     "max_pages_per_chunk": 4,
-    "avg_pages_per_chunk": 1.28,
-    "single_page_chunks": 170,
-    "avg_chars_per_chunk": 1073
+    "avg_pages_per_chunk": 1.29,
+    "single_page_chunks": 165,
+    "avg_chars_per_chunk": 1099
   }
 }

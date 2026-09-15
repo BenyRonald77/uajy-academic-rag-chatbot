@@ -70,12 +70,34 @@ class TestRetrievalCandidate:
         c = RetrievalCandidate(chunk_index=0, text="x", page_numbers=[39, 40, 41])
         assert c.page_label == "39-41"
 
-    def test_heading_label_mengutamakan_heading_path(self):
+    def test_heading_label_hanya_yang_terdalam(self):
+        """
+        Sitasi menampilkan judul terdalam, bukan seluruh jalurnya.
+
+        Judul akar berasal dari heuristik huruf kapital yang pada dokumen
+        nyata ikut menangkap label kolom tabel — 44% chunk berakar tak
+        bermakna, dibanding 8% pada judul terdalamnya.
+        """
         c = RetrievalCandidate(
             chunk_index=0, text="x", page_numbers=[1],
-            section_title="diabaikan", heading_path=["BAB I", "Pasal 2"],
+            section_title="H. Cuti Studi", heading_path=["PROGRAM", "H. Cuti Studi"],
         )
-        assert c.heading_label == "BAB I › Pasal 2"
+        assert c.heading_label == "H. Cuti Studi"
+
+    def test_heading_path_label_untuk_audit(self):
+        """Jalur lengkap tetap tersedia untuk panel debug."""
+        c = RetrievalCandidate(
+            chunk_index=0, text="x", page_numbers=[1],
+            section_title="Pasal 2", heading_path=["BAB I", "Pasal 2"],
+        )
+        assert c.heading_path_label == "BAB I › Pasal 2"
+
+    def test_heading_label_jatuh_ke_jalur_bila_section_kosong(self):
+        c = RetrievalCandidate(
+            chunk_index=0, text="x", page_numbers=[1],
+            heading_path=["BAB I", "Pasal 2"],
+        )
+        assert c.heading_label == "Pasal 2"
 
     def test_heading_label_jatuh_ke_section_title(self):
         c = RetrievalCandidate(
@@ -189,11 +211,12 @@ class TestFormatSources:
     def test_memuat_halaman_dan_bagian(self, candidate_factory):
         c = candidate_factory(
             page_numbers=[48], dense_score=0.87,
-            heading_path=["BAB IV", "M. Yudisium"],
+            section_title="M. Yudisium", heading_path=["BAB IV", "M. Yudisium"],
         )
         hasil = format_sources([c])
         assert "48" in hasil
-        assert "BAB IV › M. Yudisium" in hasil
+        assert "M. Yudisium" in hasil
+        assert "BAB IV" not in hasil, "sitasi hanya menampilkan judul terdalam"
         assert "87%" in hasil
 
     def test_sumber_duplikat_digabung(self, candidate_factory):

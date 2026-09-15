@@ -73,6 +73,64 @@ _HEADING_PATTERNS: list[tuple[int, bool, re.Pattern]] = [
 #: "PENDAHULUAN"), bukan heading baru.
 _ALL_CAPS_RE = re.compile(r"^[A-Z][A-Z\s\-–—/&(),.']{5,}$")
 
+#: Minimum jumlah huruf agar baris huruf kapital dianggap judul.
+#:
+#: Tanpa syarat ini, potongan akhir kalimat yang kebetulan berhuruf kapital
+#: ikut terangkat menjadi judul tingkat atas. Pada dokumen ini pengukuran
+#: menemukan "UAJY)." mencemari 59 chunk, "PKKMB)." 8 chunk, dan "AB-PUI"
+#: 1 chunk — totalnya 31% dari seluruh chunk menampilkan label bagian yang
+#: tidak bermakna pada sitasinya.
+#:
+#: Ambang ini HANYA berlaku untuk aturan huruf kapital. Heading struktural
+#: seperti "BAB I" hanya punya empat huruf tetapi sudah dikenali lewat pola
+#: tersendiri, jadi tidak boleh ikut tersaring.
+_MIN_ALL_CAPS_HEADING_LETTERS = 6
+
+#: Baris kepala tabel yang dimulai kolom penomoran ("NO." / "NO URUT").
+#: Pada dokumen ini satu baris semacam itu sempat menjadi akar heading bagi
+#: 94 chunk, karena judul tingkat atas mewarisi seluruh chunk sesudahnya.
+_TABLE_HEADER_RE = re.compile(r"^NO\.?\s", re.IGNORECASE)
+
+
+def _is_all_caps_heading(line: str) -> bool:
+    """
+    Tentukan apakah baris huruf kapital layak dianggap judul bagian.
+
+    Aturan huruf kapital bersifat menentukan pada dokumen ini: hampir seluruh
+    judul bagiannya memakai huruf kapital, bukan penanda "BAB". Karena itu
+    setiap salah tebak berdampak luas — judul tingkat atas menjadi akar
+    hierarki bagi semua chunk sesudahnya sampai judul berikutnya muncul.
+
+    Tiga bentuk bukan-judul yang tersaring di sini, semuanya ditemukan lewat
+    pengukuran pada dokumen sungguhan:
+
+    - **Pecahan kalimat.** Sisa dari "... (UAJY)." menyisakan baris "UAJY).",
+      pendek dan berkurung tutup tanpa pembuka.
+    - **Baris kepala tabel.** "NO. FAKULTAS KONSENTRASI / PEMINATAN STATUS"
+      sempat menjadi akar heading bagi 94 chunk sekaligus.
+    - **Judul terpotong.** Baris yang berakhir dengan "/" atau "-" jelas masih
+      bersambung ke baris berikutnya.
+    """
+    if not _ALL_CAPS_RE.match(line):
+        return False
+
+    if sum(1 for c in line if c.isalpha()) < _MIN_ALL_CAPS_HEADING_LETTERS:
+        return False
+
+    # Tanda kurung tutup tanpa pembuka menandakan baris ini pecahan kalimat.
+    if line.count(")") != line.count("("):
+        return False
+
+    # Kolom penomoran adalah penanda paling khas baris kepala tabel.
+    if _TABLE_HEADER_RE.match(line):
+        return False
+
+    # Judul yang berakhir dengan pemisah masih terpotong, belum utuh.
+    if line.rstrip().endswith(("/", "-", "–", "—", ",")):
+        return False
+
+    return True
+
 #: Penanda awal butir daftar.
 _BULLET_RE = re.compile(r"^(?:[-•*▪o]\s+|\(?\d{1,2}[.)]\s+|[a-z][.)]\s+)")
 
@@ -223,7 +281,7 @@ def _detect_heading(line: str) -> tuple[int, str, bool] | None:
         if pattern.match(stripped):
             return level, stripped, is_structural
 
-    if _ALL_CAPS_RE.match(stripped):
+    if _is_all_caps_heading(stripped):
         return 0, stripped, False
 
     return None

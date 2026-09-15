@@ -78,7 +78,14 @@ MODEL_FALLBACKS: dict[str, tuple[str, ...]] = {
 
 #: Suhu rendah untuk jawaban faktual.
 ANSWER_TEMPERATURE = 0.2
-ANSWER_MAX_TOKENS = 2048
+
+#: Batas token keluaran untuk jawaban.
+#:
+#: Pada model Gemini 3.x, token *thinking* ikut dihitung ke dalam batas ini.
+#: Dengan 2048, satu pertanyaan berjawaban panjang (ketentuan herregistrasi)
+#: terpotong di tengah kalimat sebelum sampai ke baris sumber — jawaban jadi
+#: kehilangan sitasinya, padahal sitasi itulah yang membuatnya bisa diperiksa.
+ANSWER_MAX_TOKENS = 4096
 
 #: Tugas bantu harus deterministik.
 UTILITY_TEMPERATURE = 0.0
@@ -91,6 +98,24 @@ UTILITY_TEMPERATURE = 0.0
 CHUNK_SIZE = 1400          # karakter (~350 token)
 CHUNK_OVERLAP = 250        # karakter (~62 token)
 MIN_CHUNK_SIZE = 120       # chunk di bawah ini dibuang
+
+#: Versi logika pipeline ingestion (ekstraksi + chunking).
+#:
+#: `index_info.json` mencatat parameter chunking, tetapi parameter saja tidak
+#: cukup: perubahan pada *logika* — daftar gugus konsonan yang sah, aturan
+#: pendeteksi heading, penyaring noise — mengubah hasil tanpa mengubah satu
+#: pun angka parameter. Index lama lalu tetap terpakai tanpa keluhan, dan
+#: satu-satunya cara mengetahuinya adalah mengukur manual.
+#:
+#: NAIKKAN nilai ini setiap kali perubahan pada `ingestion/` mengubah isi
+#: chunk yang dihasilkan. Aplikasi akan memberi tahu bahwa index perlu
+#: dibangun ulang.
+#:
+#: Riwayat:
+#:   1 — versi awal
+#:   2 — gugus konsonan sah (str/tr/st/...) tidak lagi dianggap teks rusak
+#:   3 — potongan kalimat berhuruf kapital tidak lagi diangkat jadi judul
+INGESTION_PIPELINE_VERSION = 3
 
 
 # ──────────────────────────────────────────────

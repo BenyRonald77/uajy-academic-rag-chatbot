@@ -1,0 +1,726 @@
+{
+  "partial_run": false,
+  "filters": {
+    "limit": null,
+    "category": null
+  },
+  "index": {
+    "total_chunks": 218,
+    "total_pages": 78
+  },
+  "config": {
+    "use_hybrid": true,
+    "use_rerank": true,
+    "use_query_rewrite": true,
+    "top_k": 4,
+    "judge_enabled": true,
+    "groundedness_pass_score": 7.0
+  },
+  "metrics": {
+    "total": 22,
+    "generation_failures": 1,
+    "in_scope_total": 16,
+    "out_of_scope_total": 5,
+    "answered_total": 16,
+    "groundedness_rate": 1.0,
+    "avg_groundedness_score": 10.0,
+    "judged_total": 16,
+    "judge_failures": 0,
+    "citation_presence": 0.9375,
+    "citation_validity": 0.9375,
+    "avg_citation_precision": 1.0,
+    "cites_expected_page": 0.9375,
+    "refusal_accuracy_e2e": 1.0,
+    "false_refusal_e2e": 0.0,
+    "avg_latency_ms": 7697.819127272603
+  },
+  "results": [
+    {
+      "id": 1,
+      "question": "Berapa IPK minimum untuk mendapatkan predikat kelulusan Cum Laude?",
+      "category": "in_scope",
+      "answer": "Berdasarkan dokumen akademik Universitas Atma Jaya Yogyakarta, IPK minimum untuk mendapatkan predikat kelulusan **Cum Laude** adalah **3,51** (berada pada rentang IPK 3,51 – 4,00 untuk predikat Pujian/Excellent).\n\nPredikat kelulusan Pujian/Excellent dapat ditetapkan menjadi predikat **Cum Laude** apabila memenuhi syarat-syarat berikut:\n1. Masa studi lulusan maksimal adalah masa studi normal sesuai program studinya ditambah 1 (satu) semester.\n2. Tidak ada mata kuliah dengan nilai kurang dari B.\n\n📄 Sumber: Halaman 48 — M. Evaluasi Hasil Belajar dan Yudisium",
+      "refused_by_retrieval": false,
+      "refused_in_answer": false,
+      "cited_pages": [
+        48
+      ],
+      "context_pages": [
+        48,
+        49
+      ],
+      "invalid_citations": [],
+      "has_citation": true,
+      "citation_valid": true,
+      "citation_precision": 1.0,
+      "expected_pages": [
+        48
+      ],
+      "cites_expected_page": true,
+      "groundedness_score": 10.0,
+      "unsupported_claims": [],
+      "grounded": true,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 11013.276200043038,
+      "refused": false
+    },
+    {
+      "id": 2,
+      "question": "Berapa total SKS minimal yang harus ditempuh untuk lulus program Sarjana?",
+      "category": "in_scope",
+      "answer": "Total SKS minimal yang harus ditempuh untuk lulus program Sarjana di Universitas Atma Jaya Yogyakarta adalah paling sedikit **144 SKS**.\n\n📄 Sumber: Halaman 27 — A. Program Sarjana, Program Magister, dan Program Doktor",
+      "refused_by_retrieval": false,
+      "refused_in_answer": false,
+      "cited_pages": [
+        27
+      ],
+      "context_pages": [
+        27
+      ],
+      "invalid_citations": [],
+      "has_citation": true,
+      "citation_valid": true,
+      "citation_precision": 1.0,
+      "expected_pages": [
+        27
+      ],
+      "cites_expected_page": true,
+      "groundedness_score": 10.0,
+      "unsupported_claims": [],
+      "grounded": true,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 7340.616300003603,
+      "refused": false
+    },
+    {
+      "id": 3,
+      "question": "Berapa lama masa studi maksimal untuk program Sarjana di UAJY?",
+      "category": "in_scope",
+      "answer": "Masa studi maksimal (paling lama) untuk program Sarjana di UAJY adalah **6 (enam) tahun**. \n\nSebagai informasi tambahan, masa studi normal untuk program Sarjana dijadwalkan dapat diselesaikan dalam waktu 8 (delapan) semester dengan beban belajar paling sedikit 144 SKS.\n\n📄 Sumber: Halaman 27 — A. Program Sarjana, Program Magister, dan Program Doktor",
+      "refused_by_retrieval": false,
+      "refused_in_answer": false,
+      "cited_pages": [
+        27
+      ],
+      "context_pages": [
+        27
+      ],
+      "invalid_citations": [],
+      "has_citation": true,
+      "citation_valid": true,
+      "citation_precision": 1.0,
+      "expected_pages": [
+        27,
+        47
+      ],
+      "cites_expected_page": true,
+      "groundedness_score": 10.0,
+      "unsupported_claims": [],
+      "grounded": true,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 7202.563299972098,
+      "refused": false
+    },
+    {
+      "id": 4,
+      "question": "Berapa maksimal semester cuti studi yang dapat diberikan kepada mahasiswa?",
+      "category": "in_scope",
+      "answer": "Berikut adalah ketentuan batas maksimal cuti studi yang dapat diberikan kepada mahasiswa berdasarkan jenjang program studinya:\n\n* **Program Sarjana (S1):** Maksimal **2 (dua) semester**, baik berurutan maupun tidak.\n* **Program Pendidikan Profesi:** Maksimal **1 (satu) semester**.\n* **Program Magister (S2):** Maksimal **1 (satu) semester**.\n* **Program Doktor (S3):** Maksimal **2 (dua) semester**.\n\n📄 Sumber: Halaman 39-40 — [H. Cuti Studi]",
+      "refused_by_retrieval": false,
+      "refused_in_answer": false,
+      "cited_pages": [
+        39,
+        40
+      ],
+      "context_pages": [
+        39,
+        40
+      ],
+      "invalid_citations": [],
+      "has_citation": true,
+      "citation_valid": true,
+      "citation_precision": 1.0,
+      "expected_pages": [
+        39,
+        40,
+        41
+      ],
+      "cites_expected_page": true,
+      "groundedness_score": 10.0,
+      "unsupported_claims": [],
+      "grounded": true,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 9432.3498000158,
+      "refused": false
+    },
+    {
+      "id": 5,
+      "question": "Apakah cuti studi diperhitungkan sebagai masa studi?",
+      "category": "in_scope",
+      "answer": "Tidak, cuti studi **tidak diperhitungkan sebagai masa studi**. \n\nKetentuan ini berlaku untuk seluruh program pendidikan, baik Program Sarjana (S1), Program Pendidikan Profesi, Program Magister (S2), maupun Program Doktor (S3).\n\n📄 Sumber: Halaman 39-40 — H. Cuti Studi",
+      "refused_by_retrieval": false,
+      "refused_in_answer": false,
+      "cited_pages": [
+        39,
+        40
+      ],
+      "context_pages": [
+        39,
+        40
+      ],
+      "invalid_citations": [],
+      "has_citation": true,
+      "citation_valid": true,
+      "citation_precision": 1.0,
+      "expected_pages": [
+        39,
+        40,
+        41
+      ],
+      "cites_expected_page": true,
+      "groundedness_score": 10.0,
+      "unsupported_claims": [],
+      "grounded": true,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 8052.590500039514,
+      "refused": false
+    },
+    {
+      "id": 6,
+      "question": "Bagaimana prosedur pengajuan cuti studi?",
+      "category": "in_scope",
+      "answer": "Berikut adalah prosedur pengajuan cuti studi di Universitas Atma Jaya Yogyakarta:\n\n1. Permohonan cuti studi diajukan oleh mahasiswa yang bersangkutan melalui Kantor Admisi dan Akademik (KAA) pada masa herregistrasi.\n2. Mengisi formulir yang telah disediakan melalui laman [https://kaa.uajy.ac.id/form-permohonan-cuti-studi/](https://kaa.uajy.ac.id/form-permohonan-cuti-studi/), dengan melampirkan:\n   * **Program Sarjana (S1):** Surat keterangan dari fakultas yang menyatakan telah lolos evaluasi studi 2 (dua) tahun dan tidak sedang mengerjakan tugas akhir atau skripsi.\n   * **Program Pendidikan Profesi, Magister, dan Doktor:** Surat keterangan/rekomendasi dari Ketua Program Studi.\n3. Mahasiswa yang diizinkan cuti studi akan mendapatkan Surat Cuti Studi.\n4. Mahasiswa yang akan aktif kembali setelah cuti studi wajib mengajukan permohonan aktif kembali kepada Kepala Kantor Admisi dan Akademik yang dilayani pada masa herregistrasi.\n5. Jumlah Satuan Kredit Semester (SKS) yang dapat diambil setelah aktif kembali dihitung berdasarkan Indeks Prestasi (IP) terakhir pada saat mengajukan cuti studi.\n6. Pengambilan mata kuliah setelah cuti studi tergantung pada penawaran mata kuliah pada semester yang bersangkutan.\n\n📄 Sumber: Halaman 40 — H. Cuti Studi",
+      "refused_by_retrieval": false,
+      "refused_in_answer": false,
+      "cited_pages": [
+        40
+      ],
+      "context_pages": [
+        39,
+        40,
+        41
+      ],
+      "invalid_citations": [],
+      "has_citation": true,
+      "citation_valid": true,
+      "citation_precision": 1.0,
+      "expected_pages": [
+        39,
+        40,
+        41
+      ],
+      "cites_expected_page": true,
+      "groundedness_score": 10.0,
+      "unsupported_claims": [],
+      "grounded": true,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 16630.666800017934,
+      "refused": false
+    },
+    {
+      "id": 7,
+      "question": "Berapa nilai indeks untuk nilai huruf A dalam sistem penilaian UAJY?",
+      "category": "in_scope",
+      "answer": "Berdasarkan pedoman pemberian nilai di Universitas Atma Jaya Yogyakarta, nilai indeks untuk nilai huruf **A** (dengan rentang nilai angka 85 - 100) adalah **4,00**.\n\n📄 Sumber: Halaman 45 & 46 — M. Evaluasi Hasil Belajar dan Yudisium",
+      "refused_by_retrieval": false,
+      "refused_in_answer": false,
+      "cited_pages": [
+        45
+      ],
+      "context_pages": [
+        45,
+        46
+      ],
+      "invalid_citations": [],
+      "has_citation": true,
+      "citation_valid": true,
+      "citation_precision": 1.0,
+      "expected_pages": [
+        45,
+        46
+      ],
+      "cites_expected_page": true,
+      "groundedness_score": 10.0,
+      "unsupported_claims": [],
+      "grounded": true,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 6962.776499975007,
+      "refused": false
+    },
+    {
+      "id": 8,
+      "question": "Apa yang dimaksud dengan ujian pendadaran?",
+      "category": "in_scope",
+      "answer": "Ujian Pendadaran adalah ujian lisan yang dilaksanakan untuk mengevaluasi skripsi. \n\nUjian pendadaran ini terdiri dari:\n1. Ujian skripsi\n2. Ujian komprehensif\n\n📄 Sumber: Halaman 45 — M. Evaluasi Hasil Belajar dan Yudisium",
+      "refused_by_retrieval": false,
+      "refused_in_answer": false,
+      "cited_pages": [
+        45
+      ],
+      "context_pages": [
+        45,
+        46
+      ],
+      "invalid_citations": [],
+      "has_citation": true,
+      "citation_valid": true,
+      "citation_precision": 1.0,
+      "expected_pages": [
+        45,
+        46
+      ],
+      "cites_expected_page": true,
+      "groundedness_score": 10.0,
+      "unsupported_claims": [],
+      "grounded": true,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 7572.422500001267,
+      "refused": false
+    },
+    {
+      "id": 9,
+      "question": "Apa yang dimaksud dengan Sistem Kredit Semester?",
+      "category": "in_scope",
+      "answer": "Sistem Kredit Semester (SKS) adalah sistem penyelenggaraan pendidikan yang menggunakan satuan kredit semester (sks) untuk menyatakan:\n\n* Beban studi mahasiswa\n* Besarnya pengakuan atas keberhasilan usaha mahasiswa\n* Beban kerja Dosen\n* Pengalaman belajar\n* Beban penyelenggaraan program\n\n📄 Sumber: Halaman 25 — C. SISTEM PENYELENGGARAAN PENDIDIKAN & Halaman 42, 43 — J. Perkuliahan",
+      "refused_by_retrieval": false,
+      "refused_in_answer": false,
+      "cited_pages": [
+        25,
+        42,
+        43
+      ],
+      "context_pages": [
+        25,
+        42,
+        43
+      ],
+      "invalid_citations": [],
+      "has_citation": true,
+      "citation_valid": true,
+      "citation_precision": 1.0,
+      "expected_pages": [
+        25,
+        42,
+        43
+      ],
+      "cites_expected_page": true,
+      "groundedness_score": 10.0,
+      "unsupported_claims": [],
+      "grounded": true,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 6826.666700013448,
+      "refused": false
+    },
+    {
+      "id": 10,
+      "question": "Bagaimana ketentuan beban studi dan beban kredit semester mahasiswa?",
+      "category": "in_scope",
+      "answer": "Berikut adalah ketentuan mengenai beban studi dan beban kredit semester mahasiswa:\n\n1. **Sistem Kredit Semester (SKS)**\n   Pendidikan di UAJY diselenggarakan dengan Sistem Kredit Semester (SKS) untuk menyatakan beban studi mahasiswa, beban kerja dosen, pengalaman belajar, dan beban penyelenggaraan program.\n\n2. **Perencanaan Beban Studi**\n   Perencanaan Beban Studi adalah penyusunan program akademik oleh mahasiswa dengan bimbingan Pembimbing Akademik berdasarkan syarat dan peraturan yang berlaku.\n\n3. **Beban Kredit Semester**\n   Beban Kredit Semester adalah jumlah SKS maksimal yang dapat diambil mahasiswa dalam satu semester, dengan ketentuan:\n   * **Semester Pertama:** Setiap mahasiswa baru wajib mengambil sejumlah mata kuliah yang telah ditentukan oleh Fakultas masing-masing.\n   * **Semester Selanjutnya:** Beban kredit semester mahasiswa ditentukan atas dasar Indeks Prestasi (IP) studi mahasiswa pada semester sebelumnya.\n\n📄 Sumber: Halaman 42–43 — J. Perkuliahan",
+      "refused_by_retrieval": false,
+      "refused_in_answer": false,
+      "cited_pages": [
+        42,
+        43
+      ],
+      "context_pages": [
+        25,
+        42,
+        43
+      ],
+      "invalid_citations": [],
+      "has_citation": true,
+      "citation_valid": true,
+      "citation_precision": 1.0,
+      "expected_pages": [
+        42,
+        43
+      ],
+      "cites_expected_page": true,
+      "groundedness_score": 10.0,
+      "unsupported_claims": [],
+      "grounded": true,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 9620.60639995616,
+      "refused": false
+    },
+    {
+      "id": 11,
+      "question": "Apa saja ketentuan herregistrasi bagi mahasiswa?",
+      "category": "in_scope",
+      "answer": "Berikut adalah ketentuan herregistrasi bagi mahasiswa berdasarkan dokumen akademik UAJY:\n\n### **1. Pengertian**\nHerregistrasi adalah proses pendaftaran kembali mahasiswa yang akan aktif pada setiap semester. Segala ketentuan mengenai herregistrasi diatur dengan SK Rektor.\n\n---\n\n### **2. Prosedur dan Persyaratan Umum**\n* **Pengumuman:** Setiap semester UAJY mengumumkan jadwal serta ketentuan mengenai Herregistrasi dan Biaya Pendidikan Mahasiswa.\n* **Pembayaran:** Mahasiswa membayar lunas UKT/SPP (Sumbangan Pembinaan Pendidikan) Tetap melalui bank kerja sama (Bank BNI 46, Bank MANDIRI, Bank BRI, Bank CIMB Niaga, dan Bank BPD) baik secara tunai maupun via ATM. Prosedur pembayaran di tiap bank dapat dilihat di fakultas masing-masing.\n* **Status Aktif:** Setelah pembayaran berhasil, mahasiswa secara otomatis tercatat sebagai mahasiswa aktif pada semester tersebut.\n\n---\n\n### **3. Prosedur dan Persyaratan Khusus**\n\n#### **a. Mahasiswa yang Tidak Herregistrasi pada Semester Sebelumnya:**\n* Mengajukan pendaftaran dengan mengisi formulir online melalui laman **kaa.uajy.ac.id** sesuai jadwal herregistrasi yang telah ditetapkan universitas.\n* Membayar denda tidak aktif sebesar **50% dari SPP Tetap/UKT** di semester tidak aktif (bagi mahasiswa yang *tidak sedang* mengerjakan tugas akhir).\n* Membayar denda tidak aktif sebesar **100% dari SPP Tetap/UKT** di semester tidak aktif (bagi mahasiswa yang *sedang* mengambil tugas akhir).\n* Selanjutnya mengikuti Prosedur dan Persyaratan Umum.\n\n#### **b. Keterlambatan Pembayaran SPP:**\n* **SPP Tetap/UKT:** Keterlambatan masih dilayani sampai dengan 2 (dua) hari sebelum batas akhir jadwal pengisian KRS.\n* **SPP Variabel:** Keterlambatan masih dilayani sampai dengan 2 (dua) hari sebelum pelaksanaan Ujian Tengah Semester (UTS).\n* **Sanksi Denda:**\n  * **15%** dari SPP Tetap atau SPP Variabel untuk **Program Sarjana**.\n  * **10%** dari SPP Tetap atau SPP Variabel untuk **Program Profesi, Magister, dan Doktor**.\n\n#### **c. Ketentuan Bagi Mahasiswa Belum Yudisium:**\n* Mahasiswa yang telah lulus ujian skripsi/tesis/disertasi/tugas akhir tetapi belum dinyatakan kelulusannya dalam yudisium pada semester yang sedang berlangsung, wajib",
+      "refused_by_retrieval": false,
+      "refused_in_answer": false,
+      "cited_pages": [],
+      "context_pages": [
+        38,
+        39
+      ],
+      "invalid_citations": [],
+      "has_citation": false,
+      "citation_valid": false,
+      "citation_precision": 0.0,
+      "expected_pages": [
+        38,
+        39,
+        40,
+        41,
+        42
+      ],
+      "cites_expected_page": false,
+      "groundedness_score": 10.0,
+      "unsupported_claims": [],
+      "grounded": true,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 13785.85170005681,
+      "refused": false
+    },
+    {
+      "id": 12,
+      "question": "Bagaimana ketentuan evaluasi hasil belajar dua tahun pertama?",
+      "category": "in_scope",
+      "answer": "Berikut adalah ketentuan Evaluasi Hasil Belajar Dua Tahun Pertama (Evaluasi Ke-1) di Universitas Atma Jaya Yogyakarta berdasarkan dokumen resmi:\n\n### **1. Jenis Evaluasi**\nEvaluasi ini terdiri atas 2 (dua) jenis, yaitu:\n*   **Evaluasi Preventif**\n    *   Dilakukan setelah berakhirnya **Semester I, II, dan III**.\n    *   **Tujuan:** \n        1. Membantu mahasiswa (terutama yang memiliki prestasi akademik rendah) menghindari risiko pemutusan hak studi setelah dua tahun.\n        2. Mengingatkan, mendorong, serta memberi motivasi bagi mahasiswa yang berprestasi baik agar dapat mempertahankannya.\n    *   Fakultas akan memberikan informasi mengenai hasil evaluasi preventif kepada mahasiswa dan orang tua mahasiswa.\n*   **Evaluasi Definitif (Final)**\n    *   Dilakukan setelah berakhirnya **Semester IV**.\n    *   **Tujuan:** Menentukan mahasiswa yang akan mengalami pemutusan hak studi (drop out) setelah dua tahun.\n\n---\n\n### **2. Syarat Melanjutkan Studi**\nBerdasarkan Surat Keputusan Rektor Nomor: 160/HP/Akd.DO/2016, mahasiswa dapat melanjutkan studinya apabila setelah semester IV berhasil mencapai:\n1.  **Sekurang-kurangnya 40 (empat puluh) SKS** dari nilai tertinggi yang telah diperoleh.\n2.  **Indeks Prestasi Kumulatif (IPK)** sekurang-kurangnya sama dengan syarat lulus masing-masing program studi, antara lain:\n    *   Arsitektur, Teknik Sipil, Teknik Industri, Informatika, Ilmu Komunikasi, Sosiologi, Sistem Informasi, Teknik Sipil/Industri Internasional: **IPK ≥ 2,25**\n    *   Biologi, Teknologi Pangan: **IPK ≥ 2,30**\n    *   Manajemen, Akuntansi, Hukum, Ekonomi Pembangunan, Manajemen/Akuntansi Internasional, Hukum Program Internasional, Pendidikan Profesi Arsitek: **IPK ≥ 2,50**\n\n---\n\n### **3. Sanksi Ketidaklulusan Evaluasi**\nMahasiswa yang **tidak memenuhi syarat** untuk melanjutkan studi berdasarkan evaluasi hasil belajar dua tahun pertama ini akan diberi **Surat Pemutusan Hak Studi** oleh Rektor.\n\n***\n\n📄 **Sumber:** \n* Halaman 45–47 — M. Evaluasi Hasil Belajar dan Yudisium\n* Halaman 62 — REKTOR UNIVERSITAS ATMA JAYA YOGYAKARTA",
+      "refused_by_retrieval": false,
+      "refused_in_answer": false,
+      "cited_pages": [
+        45,
+        46,
+        47,
+        62
+      ],
+      "context_pages": [
+        45,
+        46,
+        47,
+        62
+      ],
+      "invalid_citations": [],
+      "has_citation": true,
+      "citation_valid": true,
+      "citation_precision": 1.0,
+      "expected_pages": [
+        46,
+        47
+      ],
+      "cites_expected_page": true,
+      "groundedness_score": 10.0,
+      "unsupported_claims": [],
+      "grounded": true,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 13979.462100018281,
+      "refused": false
+    },
+    {
+      "id": 13,
+      "question": "Apa itu program remedi di UAJY?",
+      "category": "in_scope",
+      "answer": "Berdasarkan dokumen akademik Universitas Atma Jaya Yogyakarta, **Program Remedi** diatur dalam Keputusan Rektor nomor 91/HP/REM.REV.III/2017. \n\n**Pengertian dan Ketentuan Umum Program Remedi:**\n* **Pengertian:** Remedi adalah proses untuk memperbaiki hasil pembelajaran mahasiswa yang tidak memenuhi kompetensi dasar minimal.\n* **Penerima:** Diberikan kepada mahasiswa yang mengambil mata kuliah pada semester yang sedang berlangsung.\n* **Mata Kuliah:** Mata kuliah yang ditawarkan untuk remedi ditentukan oleh masing-masing Program Studi.\n* **Pelaksanaan:** Bentuk dan metode pelaksanaan remedi ditentukan berdasarkan kesepakatan antara dosen dan Program Studi.\n* **Penilaian:** Nilai tertinggi yang dapat diperoleh pada program remedi adalah maksimum **B**, yang merupakan gabungan dari proses pembelajaran selama satu semester dan hasil proses remedi.\n* **Hasil:** Pelaksanaan remedi tidak menjamin perbaikan nilai akhir.\n\n📄 Sumber: Halaman 49 — O. Program Remedi",
+      "refused_by_retrieval": false,
+      "refused_in_answer": false,
+      "cited_pages": [
+        49
+      ],
+      "context_pages": [
+        49,
+        50
+      ],
+      "invalid_citations": [],
+      "has_citation": true,
+      "citation_valid": true,
+      "citation_precision": 1.0,
+      "expected_pages": [
+        49,
+        50
+      ],
+      "cites_expected_page": true,
+      "groundedness_score": 10.0,
+      "unsupported_claims": [],
+      "grounded": true,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 7528.589399997145,
+      "refused": false
+    },
+    {
+      "id": 14,
+      "question": "Beasiswa apa saja yang tersedia bagi mahasiswa UAJY?",
+      "category": "in_scope",
+      "answer": "Berikut adalah beasiswa yang tersedia bagi calon mahasiswa dan mahasiswa Universitas Atma Jaya Yogyakarta (UAJY) berdasarkan dokumen pedoman:\n\n**1. Beasiswa Jalur Penerimaan Mahasiswa Baru (PMB):**\n* **Beasiswa Program Akademik (BPA)**\n* **Beasiswa Internasional Mahasiswa Asing (BIMA)**\n* **PMB KIP Kuliah**\n* **Beasiswa Peduli Berkebutuhan Khusus**\n* **Beasiswa Ketapang**\n* **Beasiswa OSC (Online Scholarship Competition)**\n* **Beasiswa Mudika Unggul**\n* **Beasiswa Prestasi Seni dan Olah Raga**\n* **Beasiswa APTIK Peduli Mentawai**\n\n**2. Beasiswa Umum / Mahasiswa:**\n* **Beasiswa Yayasan Slamet Rijadi Yogyakarta / Universitas Atma Jaya Yogyakarta**\n* **Beasiswa dari Asosiasi Perguruan Tinggi Katolik Indonesia (APTIK)**\n* **Beasiswa Liem Family Scholarship**\n* **Beasiswa Alumni / KAMAJAYA**\n* **Beasiswa dari instansi di luar UAJY** (Pemerintah, Perusahaan, dan Bank Swasta)\n\n***\n\n📄 **Sumber:** \n* Halaman 34-35 — [B. Penerimaan Mahasiswa Baru]\n* Halaman 111 — [C. BEASISWA]",
+      "refused_by_retrieval": false,
+      "refused_in_answer": false,
+      "cited_pages": [
+        34,
+        35,
+        111
+      ],
+      "context_pages": [
+        34,
+        35,
+        111
+      ],
+      "invalid_citations": [],
+      "has_citation": true,
+      "citation_valid": true,
+      "citation_precision": 1.0,
+      "expected_pages": [
+        32,
+        33,
+        34,
+        35,
+        36
+      ],
+      "cites_expected_page": true,
+      "groundedness_score": 10.0,
+      "unsupported_claims": [],
+      "grounded": true,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 10197.06320000114,
+      "refused": false
+    },
+    {
+      "id": 15,
+      "question": "Bagaimana ketentuan pindah program studi?",
+      "category": "in_scope",
+      "answer": "Berikut adalah ketentuan mengenai pindah program studi di Universitas Atma Jaya Yogyakarta (UAJY):\n\n### **1. Ketentuan Umum**\n* Mahasiswa wajib mengikuti program PMB yang ditentukan universitas dan dinyatakan lulus.\n* Mahasiswa pindahan hanya diperbolehkan mengambil **satu pilihan** program studi yang dituju.\n* Tidak diperkenankan adanya kuliah rangkap program studi di lingkungan UAJY.\n* Tidak diperkenankan pindah program dari **program internasional ke program reguler atau sebaliknya**.\n\n---\n\n### **2. Pindah Kuliah antar Program Studi di UAJY**\n\n**a. Syarat Pengajuan:**\n1. Mahasiswa aktif pada semester sebelumnya.\n2. Maksimal adalah mahasiswa pada tahun kedua pada saat pengajuan (mahasiswa semester IV).\n3. Belum menerima pemutusan hak studi (drop out/DO).\n\n**b. Prosedur Pendaftaran:**\n1. Mengajukan permohonan pindah program studi kepada Wakil Rektor I melalui Kantor Admisi dan Akademik (KAA) paling lambat 1 hari sebelum penutupan pendaftaran PMB (formulir diakses di [kaa.uajy.ac.id](https://kaa.uajy.ac.id)).\n2. Melengkapi dokumen persyaratan:\n   * Bukti diterima (*screenshot*) pendaftaran program PMB yang ditentukan.\n   * Daftar Hasil Studi (DHS) / Rapor S1.\n   * *Screenshot* Kartu Tanda Mahasiswa Digital (KTM).\n3. Mengirimkan scan/foto formulir dan dokumen ke email: **kaa.registrasi@uajy.ac.id**.\n\n**c. Ketentuan Kelulusan & Nilai:**\n* Jika dinyatakan diterima, mahasiswa wajib membayar biaya administrasi (ditentukan pimpinan Universitas) dan membayar selisih SKPUK lama dengan yang baru.\n* Nilai mata kuliah yang dapat diakui/ditransfer minimal **B**.\n* Keputusan mengenai informasi mata kuliah yang ditransfer akan disampaikan secara tertulis.\n\n---\n\n### **3. Pindah Kuliah dari Perguruan Tinggi Lain (Program Sarjana)**\n* Hanya menerima mahasiswa pindahan dari program studi S1 (tidak menerima dari Diploma).\n* Status akreditasi PT dan prodi asal minimal sama dengan akreditasi UAJY dan prodi yang dituju.\n* Jumlah SKS yang dapat ditransfer/diakui maksimal **40 SKS** dengan nilai minimal **B**.\n* UAJY tidak menerima pindahan mahasiswa asing dari perguruan tinggi lain.\n\n***\n\n📄 Sumber: Halaman 36-37 — [F. Penerimaan Mahasiswa Pindahan untuk Program Sarjana] & Halaman 80-81 — [DI UNIVERSITAS ATMA JAYA YOGYAKARTA]",
+      "refused_by_retrieval": false,
+      "refused_in_answer": false,
+      "cited_pages": [
+        36,
+        37,
+        80,
+        81
+      ],
+      "context_pages": [
+        36,
+        37,
+        80,
+        81
+      ],
+      "invalid_citations": [],
+      "has_citation": true,
+      "citation_valid": true,
+      "citation_precision": 1.0,
+      "expected_pages": [
+        36,
+        37,
+        80,
+        81
+      ],
+      "cites_expected_page": true,
+      "groundedness_score": 10.0,
+      "unsupported_claims": [],
+      "grounded": true,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 13591.104899998754,
+      "refused": false
+    },
+    {
+      "id": 16,
+      "question": "Siapa presiden Indonesia saat ini?",
+      "category": "out_of_scope",
+      "answer": "Mohon maaf, informasi mengenai hal tersebut **tidak ditemukan** dalam dokumen yang tersedia saat ini.\n\nBeberapa saran:\n- Coba formulasikan pertanyaan dengan kata kunci yang berbeda.\n- Pastikan pertanyaan berkaitan dengan isi dokumen pedoman akademik.\n- Hubungi bagian akademik kampus untuk informasi yang tidak tercakup dalam dokumen ini.",
+      "refused_by_retrieval": true,
+      "refused_in_answer": false,
+      "cited_pages": [],
+      "context_pages": [],
+      "invalid_citations": [],
+      "has_citation": false,
+      "citation_valid": false,
+      "citation_precision": 0.0,
+      "expected_pages": [],
+      "cites_expected_page": false,
+      "groundedness_score": null,
+      "unsupported_claims": [],
+      "grounded": false,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 1719.8724999907427,
+      "refused": true
+    },
+    {
+      "id": 17,
+      "question": "Apa rumus pythagoras?",
+      "category": "out_of_scope",
+      "answer": "Mohon maaf, informasi mengenai hal tersebut **tidak ditemukan** dalam dokumen yang tersedia saat ini.\n\nBeberapa saran:\n- Coba formulasikan pertanyaan dengan kata kunci yang berbeda.\n- Pastikan pertanyaan berkaitan dengan isi dokumen pedoman akademik.\n- Hubungi bagian akademik kampus untuk informasi yang tidak tercakup dalam dokumen ini.",
+      "refused_by_retrieval": true,
+      "refused_in_answer": false,
+      "cited_pages": [],
+      "context_pages": [],
+      "invalid_citations": [],
+      "has_citation": false,
+      "citation_valid": false,
+      "citation_precision": 0.0,
+      "expected_pages": [],
+      "cites_expected_page": false,
+      "groundedness_score": null,
+      "unsupported_claims": [],
+      "grounded": false,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 1706.7705999943428,
+      "refused": true
+    },
+    {
+      "id": 18,
+      "question": "Berapa harga iPhone terbaru?",
+      "category": "out_of_scope",
+      "answer": "Mohon maaf, informasi mengenai hal tersebut **tidak ditemukan** dalam dokumen yang tersedia saat ini.\n\nBeberapa saran:\n- Coba formulasikan pertanyaan dengan kata kunci yang berbeda.\n- Pastikan pertanyaan berkaitan dengan isi dokumen pedoman akademik.\n- Hubungi bagian akademik kampus untuk informasi yang tidak tercakup dalam dokumen ini.",
+      "refused_by_retrieval": true,
+      "refused_in_answer": false,
+      "cited_pages": [],
+      "context_pages": [],
+      "invalid_citations": [],
+      "has_citation": false,
+      "citation_valid": false,
+      "citation_precision": 0.0,
+      "expected_pages": [],
+      "cites_expected_page": false,
+      "groundedness_score": null,
+      "unsupported_claims": [],
+      "grounded": false,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 1598.2026999699883,
+      "refused": true
+    },
+    {
+      "id": 19,
+      "question": "Ceritakan tentang sejarah perang dunia kedua",
+      "category": "out_of_scope",
+      "answer": "Mohon maaf, informasi mengenai hal tersebut **tidak ditemukan** dalam dokumen yang tersedia saat ini.\n\nBeberapa saran:\n- Coba formulasikan pertanyaan dengan kata kunci yang berbeda.\n- Pastikan pertanyaan berkaitan dengan isi dokumen pedoman akademik.\n- Hubungi bagian akademik kampus untuk informasi yang tidak tercakup dalam dokumen ini.",
+      "refused_by_retrieval": true,
+      "refused_in_answer": false,
+      "cited_pages": [],
+      "context_pages": [],
+      "invalid_citations": [],
+      "has_citation": false,
+      "citation_valid": false,
+      "citation_precision": 0.0,
+      "expected_pages": [],
+      "cites_expected_page": false,
+      "groundedness_score": null,
+      "unsupported_claims": [],
+      "grounded": false,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 1631.804500008002,
+      "refused": true
+    },
+    {
+      "id": 20,
+      "question": "Bagaimana cara memasak nasi goreng?",
+      "category": "out_of_scope",
+      "answer": "Mohon maaf, informasi mengenai hal tersebut **tidak ditemukan** dalam dokumen yang tersedia saat ini.\n\nBeberapa saran:\n- Coba formulasikan pertanyaan dengan kata kunci yang berbeda.\n- Pastikan pertanyaan berkaitan dengan isi dokumen pedoman akademik.\n- Hubungi bagian akademik kampus untuk informasi yang tidak tercakup dalam dokumen ini.",
+      "refused_by_retrieval": true,
+      "refused_in_answer": false,
+      "cited_pages": [],
+      "context_pages": [],
+      "invalid_citations": [],
+      "has_citation": false,
+      "citation_valid": false,
+      "citation_precision": 0.0,
+      "expected_pages": [],
+      "cites_expected_page": false,
+      "groundedness_score": null,
+      "unsupported_claims": [],
+      "grounded": false,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 1702.6541999657638,
+      "refused": true
+    },
+    {
+      "id": 21,
+      "question": "Berapa maksimalnya?",
+      "category": "in_scope",
+      "answer": "Batas maksimal cuti studi di Universitas Atma Jaya Yogyakarta berbeda-beda berdasarkan program pendidikannya, yaitu sebagai berikut:\n\n* **Program Sarjana (S1):** Maksimal 2 (dua) semester, baik berurutan maupun tidak.\n* **Program Pendidikan Profesi:** Maksimal 1 (satu) semester.\n* **Program Magister (S2):** Maksimal 1 (satu) semester.\n* **Program Doktor (S3):** Maksimal 2 (dua) semester.\n\n📄 Sumber: Halaman 39-40 — H. Cuti Studi",
+      "refused_by_retrieval": false,
+      "refused_in_answer": false,
+      "cited_pages": [
+        39,
+        40
+      ],
+      "context_pages": [
+        39,
+        40
+      ],
+      "invalid_citations": [],
+      "has_citation": true,
+      "citation_valid": true,
+      "citation_precision": 1.0,
+      "expected_pages": [
+        39,
+        40,
+        41
+      ],
+      "cites_expected_page": true,
+      "groundedness_score": 10.0,
+      "unsupported_claims": [],
+      "grounded": true,
+      "judge_failed": false,
+      "generation_failed": false,
+      "generation_error": "",
+      "latency_ms": 9170.168599986937,
+      "refused": false
+    },
+    {
+      "id": 22,
+      "question": "Apa syarat untuk mendapatkan yang tertinggi?",
+      "category": "in_scope",
+      "answer": "",
+      "refused_by_retrieval": false,
+      "refused_in_answer": false,
+      "cited_pages": [],
+      "context_pages": [],
+      "invalid_citations": [],
+      "has_citation": false,
+      "citation_valid": false,
+      "citation_precision": 0.0,
+      "expected_pages": [
+        48
+      ],
+      "cites_expected_page": false,
+      "groundedness_score": null,
+      "unsupported_claims": [],
+      "grounded": false,
+      "judge_failed": false,
+      "generation_failed": true,
+      "generation_error": "429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.",
+      "latency_ms": 2085.941399971489,
+      "refused": false
+    }
+  ]
+}

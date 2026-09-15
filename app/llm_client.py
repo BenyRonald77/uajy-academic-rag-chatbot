@@ -208,14 +208,28 @@ def call_utility_llm(
     )
 
 
-#: Galat yang menandakan model itu sendiri tidak bisa dipakai: 404 berarti
-#: model sudah dihapus, 503 berarti sedang kelebihan beban. Keduanya khas
-#: per-model, sehingga berpindah ke model lain masuk akal.
+#: Galat yang menandakan model itu sendiri tidak bisa dipakai, sehingga
+#: berpindah ke model lain masuk akal:
 #:
-#: Galat kuota (429) sengaja TIDAK disertakan. Batas kuota berlaku pada akun,
-#: bukan pada model, jadi berpindah model tidak menolong dan justru
-#: menghabiskan sisa kuota lebih cepat.
-_MODEL_UNAVAILABLE_MARKERS = ("404", "NOT_FOUND", "503", "UNAVAILABLE")
+#: - **404 / NOT_FOUND** — model sudah dihapus penyedianya.
+#: - **503 / UNAVAILABLE** — model sedang kelebihan beban.
+#: - **429 / RESOURCE_EXHAUSTED** — kuota habis.
+#:
+#: Kuota semula sengaja dikecualikan, dengan alasan batasnya berlaku pada akun
+#: sehingga berpindah model tidak menolong. Pesan galat API membuktikan alasan
+#: itu salah::
+#:
+#:     limit: 20, model: gemini-3.6-flash
+#:     quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier
+#:
+#: Kuotanya **per model**, bukan per akun. Pada tingkat gratis batasnya hanya
+#: 20 permintaan per hari per model, jadi menyebar beban ke model cadangan
+#: benar-benar menambah kapasitas alih-alih memboroskannya.
+_MODEL_UNAVAILABLE_MARKERS = (
+    "404", "NOT_FOUND",
+    "503", "UNAVAILABLE",
+    "429", "RESOURCE_EXHAUSTED",
+)
 
 #: Model yang terbukti bisa dipanggil, dipetakan dari model utama yang diminta.
 #: Tanpa ingatan ini, setiap permintaan akan menabrak model yang sudah mati
