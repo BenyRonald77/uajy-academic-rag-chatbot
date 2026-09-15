@@ -1,9 +1,9 @@
 {
   "index": {
-    "total_chunks": 219,
+    "total_chunks": 222,
     "total_pages": 78,
     "max_pages_per_chunk": 4,
-    "avg_pages_per_chunk": 1.29,
+    "avg_pages_per_chunk": 1.28,
     "embedding_task_type": "RETRIEVAL_DOCUMENT"
   },
   "questions": {
@@ -31,8 +31,8 @@
       "conversational_recall": 1.0,
       "conversational_hits": 2,
       "conversational_total": 2,
-      "avg_latency_ms": 707.2454545454545,
-      "median_latency_ms": 595.9000000000001
+      "avg_latency_ms": 688.959090909091,
+      "median_latency_ms": 562.5
     },
     "hybrid": {
       "rerank_failures": 0,
@@ -52,8 +52,8 @@
       "conversational_recall": 1.0,
       "conversational_hits": 2,
       "conversational_total": 2,
-      "avg_latency_ms": 637.8727272727273,
-      "median_latency_ms": 584.1500000000001
+      "avg_latency_ms": 598.2681818181818,
+      "median_latency_ms": 559.8499999999999
     },
     "hybrid_rerank": {
       "rerank_failures": 0,
@@ -73,8 +73,8 @@
       "conversational_recall": 1.0,
       "conversational_hits": 2,
       "conversational_total": 2,
-      "avg_latency_ms": 2028.7636363636364,
-      "median_latency_ms": 1945.2
+      "avg_latency_ms": 1898.7454545454545,
+      "median_latency_ms": 1831.7
     }
   },
   "results": {
@@ -116,9 +116,9 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8198,
-        "latency_ms": 2384.2,
+        "latency_ms": 2213.5,
         "timings_ms": {
-          "dense_ms": 2383.9,
+          "dense_ms": 2213.2,
           "lexical_ms": 0.0,
           "fusion_ms": 0.3
         },
@@ -155,14 +155,14 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.8424,
-          "max_lexical_coverage": 0.3733,
+          "max_lexical_coverage": 0.3742,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8424,
-        "latency_ms": 583.8,
+        "latency_ms": 594.9,
         "timings_ms": {
-          "dense_ms": 583.5,
+          "dense_ms": 594.5,
           "lexical_ms": 0.0,
           "fusion_ms": 0.3
         },
@@ -200,16 +200,16 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.8574,
-          "max_lexical_coverage": 0.7964,
+          "max_lexical_coverage": 0.7968,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8574,
-        "latency_ms": 612.1,
+        "latency_ms": 654.1,
         "timings_ms": {
-          "dense_ms": 611.7,
+          "dense_ms": 653.8,
           "lexical_ms": 0.0,
-          "fusion_ms": 0.4
+          "fusion_ms": 0.3
         },
         "reciprocal_rank": 1.0
       },
@@ -250,9 +250,9 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8364,
-        "latency_ms": 536.7,
+        "latency_ms": 563.3,
         "timings_ms": {
-          "dense_ms": 536.4,
+          "dense_ms": 563.0,
           "lexical_ms": 0.0,
           "fusion_ms": 0.3
         },
@@ -295,9 +295,9 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8214,
-        "latency_ms": 594.1,
+        "latency_ms": 594.0,
         "timings_ms": {
-          "dense_ms": 593.7,
+          "dense_ms": 593.6,
           "lexical_ms": 0.0,
           "fusion_ms": 0.3
         },
@@ -335,14 +335,14 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.8355,
-          "max_lexical_coverage": 0.6573,
+          "max_lexical_coverage": 0.6578,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8355,
-        "latency_ms": 614.1,
+        "latency_ms": 557.5,
         "timings_ms": {
-          "dense_ms": 613.7,
+          "dense_ms": 557.2,
           "lexical_ms": 0.0,
           "fusion_ms": 0.3
         },
@@ -379,14 +379,14 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.8211,
-          "max_lexical_coverage": 0.8905,
+          "max_lexical_coverage": 0.8902,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8211,
-        "latency_ms": 622.0,
+        "latency_ms": 550.0,
         "timings_ms": {
-          "dense_ms": 621.7,
+          "dense_ms": 549.7,
           "lexical_ms": 0.0,
           "fusion_ms": 0.3
         },
@@ -425,16 +425,16 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.8063,
-          "max_lexical_coverage": 0.6796,
+          "max_lexical_coverage": 0.6795,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8063,
-        "latency_ms": 578.5,
+        "latency_ms": 563.9,
         "timings_ms": {
-          "dense_ms": 578.2,
+          "dense_ms": 563.6,
           "lexical_ms": 0.0,
-          "fusion_ms": 0.3
+          "fusion_ms": 0.2
         },
         "reciprocal_rank": 0.25
       },
@@ -476,11 +476,11 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.846,
-        "latency_ms": 570.3,
+        "latency_ms": 561.7,
         "timings_ms": {
-          "dense_ms": 570.0,
+          "dense_ms": 561.4,
           "lexical_ms": 0.0,
-          "fusion_ms": 0.2
+          "fusion_ms": 0.3
         },
         "reciprocal_rank": 1.0
       },
@@ -516,14 +516,14 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.847,
-          "max_lexical_coverage": 0.8514,
+          "max_lexical_coverage": 0.851,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.847,
-        "latency_ms": 684.5,
+        "latency_ms": 632.4,
         "timings_ms": {
-          "dense_ms": 684.2,
+          "dense_ms": 632.1,
           "lexical_ms": 0.0,
           "fusion_ms": 0.3
         },
@@ -567,9 +567,9 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8317,
-        "latency_ms": 631.4,
+        "latency_ms": 592.4,
         "timings_ms": {
-          "dense_ms": 631.2,
+          "dense_ms": 592.2,
           "lexical_ms": 0.0,
           "fusion_ms": 0.2
         },
@@ -606,14 +606,14 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.8281,
-          "max_lexical_coverage": 0.848,
+          "max_lexical_coverage": 0.8479,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8281,
-        "latency_ms": 597.7,
+        "latency_ms": 550.6,
         "timings_ms": {
-          "dense_ms": 597.4,
+          "dense_ms": 550.3,
           "lexical_ms": 0.0,
           "fusion_ms": 0.3
         },
@@ -654,9 +654,9 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8662,
-        "latency_ms": 537.7,
+        "latency_ms": 545.2,
         "timings_ms": {
-          "dense_ms": 537.5,
+          "dense_ms": 545.0,
           "lexical_ms": 0.0,
           "fusion_ms": 0.2
         },
@@ -701,11 +701,11 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8381,
-        "latency_ms": 583.5,
+        "latency_ms": 554.8,
         "timings_ms": {
-          "dense_ms": 583.2,
+          "dense_ms": 554.5,
           "lexical_ms": 0.0,
-          "fusion_ms": 0.2
+          "fusion_ms": 0.3
         },
         "reciprocal_rank": 0.5
       },
@@ -747,11 +747,11 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8471,
-        "latency_ms": 538.6,
+        "latency_ms": 552.0,
         "timings_ms": {
-          "dense_ms": 538.3,
+          "dense_ms": 551.7,
           "lexical_ms": 0.0,
-          "fusion_ms": 0.2
+          "fusion_ms": 0.3
         },
         "reciprocal_rank": 0.5
       },
@@ -782,14 +782,14 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.7607,
-          "max_lexical_coverage": 0.2906,
+          "max_lexical_coverage": 0.2914,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.7607,
-        "latency_ms": 605.5,
+        "latency_ms": 555.2,
         "timings_ms": {
-          "dense_ms": 605.2,
+          "dense_ms": 554.9,
           "lexical_ms": 0.0,
           "fusion_ms": 0.2
         },
@@ -827,9 +827,9 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.7665,
-        "latency_ms": 600.2,
+        "latency_ms": 563.6,
         "timings_ms": {
-          "dense_ms": 599.8,
+          "dense_ms": 563.3,
           "lexical_ms": 0.0,
           "fusion_ms": 0.3
         },
@@ -844,11 +844,8 @@
         "retrieved_pages": [
           27,
           33,
-          38,
-          98,
-          99,
-          100,
-          101
+          35,
+          38
         ],
         "page_hit": false,
         "first_relevant_rank": null,
@@ -870,9 +867,9 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.7289,
-        "latency_ms": 538.1,
+        "latency_ms": 553.1,
         "timings_ms": {
-          "dense_ms": 537.9,
+          "dense_ms": 552.9,
           "lexical_ms": 0.0,
           "fusion_ms": 0.2
         },
@@ -907,14 +904,14 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.7466,
-          "max_lexical_coverage": 0.1699,
+          "max_lexical_coverage": 0.17,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.7466,
-        "latency_ms": 599.6,
+        "latency_ms": 567.5,
         "timings_ms": {
-          "dense_ms": 599.3,
+          "dense_ms": 567.2,
           "lexical_ms": 0.0,
           "fusion_ms": 0.2
         },
@@ -947,14 +944,14 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.7285,
-          "max_lexical_coverage": 0.1268,
+          "max_lexical_coverage": 0.1272,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.7285,
-        "latency_ms": 547.4,
+        "latency_ms": 523.6,
         "timings_ms": {
-          "dense_ms": 547.2,
+          "dense_ms": 523.3,
           "lexical_ms": 0.0,
           "fusion_ms": 0.2
         },
@@ -991,15 +988,15 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.8525,
-          "max_lexical_coverage": 0.5963,
+          "max_lexical_coverage": 0.5967,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8525,
-        "latency_ms": 1417.2,
+        "latency_ms": 1572.8,
         "timings_ms": {
-          "rewrite_ms": 865.9,
-          "dense_ms": 549.2,
+          "rewrite_ms": 995.4,
+          "dense_ms": 574.8,
           "lexical_ms": 0.0,
           "fusion_ms": 0.3
         },
@@ -1036,17 +1033,17 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.7618,
-          "max_lexical_coverage": 0.2024,
+          "max_lexical_coverage": 0.203,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.7618,
-        "latency_ms": 582.2,
+        "latency_ms": 541.0,
         "timings_ms": {
-          "rewrite_ms": 0.9,
-          "dense_ms": 581.0,
+          "rewrite_ms": 1.5,
+          "dense_ms": 539.2,
           "lexical_ms": 0.0,
-          "fusion_ms": 0.3
+          "fusion_ms": 0.2
         },
         "reciprocal_rank": 1.0
       }
@@ -1088,9 +1085,9 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8198,
-        "latency_ms": 615.5,
+        "latency_ms": 551.7,
         "timings_ms": {
-          "dense_ms": 614.4,
+          "dense_ms": 550.5,
           "lexical_ms": 0.4,
           "fusion_ms": 0.7
         },
@@ -1130,16 +1127,16 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.8424,
-          "max_lexical_coverage": 0.5024,
+          "max_lexical_coverage": 0.5026,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8424,
-        "latency_ms": 558.7,
+        "latency_ms": 541.6,
         "timings_ms": {
-          "dense_ms": 556.8,
-          "lexical_ms": 1.4,
-          "fusion_ms": 0.5
+          "dense_ms": 539.4,
+          "lexical_ms": 1.6,
+          "fusion_ms": 0.6
         },
         "reciprocal_rank": 0.0
       },
@@ -1181,11 +1178,11 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8574,
-        "latency_ms": 584.6,
+        "latency_ms": 547.2,
         "timings_ms": {
-          "dense_ms": 582.2,
-          "lexical_ms": 1.8,
-          "fusion_ms": 0.5
+          "dense_ms": 544.6,
+          "lexical_ms": 1.9,
+          "fusion_ms": 0.6
         },
         "reciprocal_rank": 1.0
       },
@@ -1226,9 +1223,9 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8364,
-        "latency_ms": 608.3,
+        "latency_ms": 550.1,
         "timings_ms": {
-          "dense_ms": 605.9,
+          "dense_ms": 547.7,
           "lexical_ms": 1.9,
           "fusion_ms": 0.4
         },
@@ -1271,10 +1268,10 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8214,
-        "latency_ms": 600.1,
+        "latency_ms": 564.2,
         "timings_ms": {
-          "dense_ms": 598.9,
-          "lexical_ms": 0.7,
+          "dense_ms": 563.0,
+          "lexical_ms": 0.8,
           "fusion_ms": 0.4
         },
         "reciprocal_rank": 1.0
@@ -1311,14 +1308,14 @@
           "dense_pass": true,
           "lexical_pass": true,
           "max_dense_score": 0.8355,
-          "max_lexical_coverage": 0.6573,
+          "max_lexical_coverage": 0.6578,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8355,
-        "latency_ms": 565.5,
+        "latency_ms": 549.0,
         "timings_ms": {
-          "dense_ms": 564.3,
+          "dense_ms": 547.8,
           "lexical_ms": 0.7,
           "fusion_ms": 0.5
         },
@@ -1355,16 +1352,16 @@
           "dense_pass": true,
           "lexical_pass": true,
           "max_dense_score": 0.8211,
-          "max_lexical_coverage": 0.8905,
+          "max_lexical_coverage": 0.8902,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8211,
-        "latency_ms": 568.3,
+        "latency_ms": 581.9,
         "timings_ms": {
-          "dense_ms": 566.2,
-          "lexical_ms": 1.5,
-          "fusion_ms": 0.6
+          "dense_ms": 579.7,
+          "lexical_ms": 1.6,
+          "fusion_ms": 0.5
         },
         "reciprocal_rank": 1.0
       },
@@ -1398,16 +1395,16 @@
           "dense_pass": true,
           "lexical_pass": true,
           "max_dense_score": 0.7886,
-          "max_lexical_coverage": 0.6796,
+          "max_lexical_coverage": 0.6795,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.7886,
-        "latency_ms": 523.0,
+        "latency_ms": 527.0,
         "timings_ms": {
-          "dense_ms": 522.2,
+          "dense_ms": 526.1,
           "lexical_ms": 0.3,
-          "fusion_ms": 0.4
+          "fusion_ms": 0.5
         },
         "reciprocal_rank": 1.0
       },
@@ -1448,10 +1445,10 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.846,
-        "latency_ms": 552.4,
+        "latency_ms": 541.0,
         "timings_ms": {
-          "dense_ms": 550.6,
-          "lexical_ms": 1.3,
+          "dense_ms": 539.1,
+          "lexical_ms": 1.4,
           "fusion_ms": 0.5
         },
         "reciprocal_rank": 1.0
@@ -1487,16 +1484,16 @@
           "dense_pass": true,
           "lexical_pass": true,
           "max_dense_score": 0.847,
-          "max_lexical_coverage": 0.8514,
+          "max_lexical_coverage": 0.851,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.847,
-        "latency_ms": 570.9,
+        "latency_ms": 573.0,
         "timings_ms": {
-          "dense_ms": 567.4,
-          "lexical_ms": 2.7,
-          "fusion_ms": 0.7
+          "dense_ms": 569.8,
+          "lexical_ms": 2.4,
+          "fusion_ms": 0.8
         },
         "reciprocal_rank": 1.0
       },
@@ -1539,9 +1536,9 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8317,
-        "latency_ms": 601.2,
+        "latency_ms": 569.9,
         "timings_ms": {
-          "dense_ms": 599.5,
+          "dense_ms": 568.2,
           "lexical_ms": 1.2,
           "fusion_ms": 0.5
         },
@@ -1578,16 +1575,16 @@
           "dense_pass": true,
           "lexical_pass": true,
           "max_dense_score": 0.8281,
-          "max_lexical_coverage": 0.848,
+          "max_lexical_coverage": 0.8479,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8281,
-        "latency_ms": 564.9,
+        "latency_ms": 583.4,
         "timings_ms": {
-          "dense_ms": 561.6,
-          "lexical_ms": 2.7,
-          "fusion_ms": 0.5
+          "dense_ms": 581.5,
+          "lexical_ms": 1.4,
+          "fusion_ms": 0.4
         },
         "reciprocal_rank": 1.0
       },
@@ -1626,11 +1623,11 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8662,
-        "latency_ms": 583.7,
+        "latency_ms": 599.8,
         "timings_ms": {
-          "dense_ms": 581.7,
-          "lexical_ms": 1.4,
-          "fusion_ms": 0.5
+          "dense_ms": 598.1,
+          "lexical_ms": 1.2,
+          "fusion_ms": 0.4
         },
         "reciprocal_rank": 1.0
       },
@@ -1673,11 +1670,11 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8381,
-        "latency_ms": 603.7,
+        "latency_ms": 591.8,
         "timings_ms": {
-          "dense_ms": 601.8,
-          "lexical_ms": 1.4,
-          "fusion_ms": 0.4
+          "dense_ms": 589.5,
+          "lexical_ms": 1.3,
+          "fusion_ms": 1.0
         },
         "reciprocal_rank": 1.0
       },
@@ -1721,10 +1718,10 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.8471,
-        "latency_ms": 545.6,
+        "latency_ms": 624.1,
         "timings_ms": {
-          "dense_ms": 544.0,
-          "lexical_ms": 1.0,
+          "dense_ms": 623.0,
+          "lexical_ms": 0.6,
           "fusion_ms": 0.5
         },
         "reciprocal_rank": 1.0
@@ -1762,9 +1759,9 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.7607,
-        "latency_ms": 586.8,
+        "latency_ms": 558.8,
         "timings_ms": {
-          "dense_ms": 585.7,
+          "dense_ms": 557.7,
           "lexical_ms": 0.3,
           "fusion_ms": 0.8
         },
@@ -1802,11 +1799,11 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.7665,
-        "latency_ms": 615.0,
+        "latency_ms": 513.7,
         "timings_ms": {
-          "dense_ms": 614.6,
+          "dense_ms": 513.4,
           "lexical_ms": 0.1,
-          "fusion_ms": 0.3
+          "fusion_ms": 0.2
         },
         "reciprocal_rank": 0.0
       },
@@ -1842,11 +1839,11 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.7289,
-        "latency_ms": 1031.4,
+        "latency_ms": 521.8,
         "timings_ms": {
-          "dense_ms": 1030.8,
-          "lexical_ms": 0.2,
-          "fusion_ms": 0.5
+          "dense_ms": 521.2,
+          "lexical_ms": 0.1,
+          "fusion_ms": 0.4
         },
         "reciprocal_rank": 0.0
       },
@@ -1878,15 +1875,15 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.7466,
-          "max_lexical_coverage": 0.1699,
+          "max_lexical_coverage": 0.17,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.7466,
-        "latency_ms": 539.4,
+        "latency_ms": 538.2,
         "timings_ms": {
-          "dense_ms": 538.6,
-          "lexical_ms": 0.2,
+          "dense_ms": 537.4,
+          "lexical_ms": 0.3,
           "fusion_ms": 0.5
         },
         "reciprocal_rank": 0.0
@@ -1917,16 +1914,16 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.7285,
-          "max_lexical_coverage": 0.1268,
+          "max_lexical_coverage": 0.1272,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.7285,
-        "latency_ms": 563.1,
+        "latency_ms": 580.0,
         "timings_ms": {
-          "dense_ms": 562.0,
-          "lexical_ms": 0.3,
-          "fusion_ms": 0.8
+          "dense_ms": 579.3,
+          "lexical_ms": 0.2,
+          "fusion_ms": 0.5
         },
         "reciprocal_rank": 0.0
       },
@@ -1941,6 +1938,7 @@
           41
         ],
         "retrieved_pages": [
+          39,
           40,
           41
         ],
@@ -1953,25 +1951,25 @@
         "keyword_hit": true,
         "refused": false,
         "refusal_reason": "",
-        "effective_query": "Berapa lama batas maksimal cuti studi yang dapat diajukan di UAJY?",
+        "effective_query": "Berapa lama batas maksimal cuti studi yang dapat diajukan oleh mahasiswa di UAJY?",
         "was_rewritten": true,
         "rerank_failed": false,
         "gate": {
           "passed": true,
           "dense_pass": true,
           "lexical_pass": true,
-          "max_dense_score": 0.8522,
-          "max_lexical_coverage": 0.6035,
+          "max_dense_score": 0.8581,
+          "max_lexical_coverage": 0.6101,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6
         },
-        "top_dense_score": 0.8522,
-        "latency_ms": 1464.9,
+        "top_dense_score": 0.8581,
+        "latency_ms": 1392.8,
         "timings_ms": {
-          "rewrite_ms": 914.6,
-          "dense_ms": 548.3,
-          "lexical_ms": 1.5,
-          "fusion_ms": 0.4
+          "rewrite_ms": 825.2,
+          "dense_ms": 565.0,
+          "lexical_ms": 2.1,
+          "fusion_ms": 0.5
         },
         "reciprocal_rank": 1.0
       },
@@ -2014,12 +2012,12 @@
           "lexical_coverage_threshold": 0.6
         },
         "top_dense_score": 0.7618,
-        "latency_ms": 586.2,
+        "latency_ms": 560.9,
         "timings_ms": {
-          "rewrite_ms": 0.1,
-          "dense_ms": 585.0,
-          "lexical_ms": 0.5,
-          "fusion_ms": 0.5
+          "rewrite_ms": 0.2,
+          "dense_ms": 559.3,
+          "lexical_ms": 0.4,
+          "fusion_ms": 0.8
         },
         "reciprocal_rank": 0.5
       }
@@ -2034,8 +2032,7 @@
           48
         ],
         "retrieved_pages": [
-          48,
-          49
+          48
         ],
         "page_hit": true,
         "first_relevant_rank": 1,
@@ -2061,12 +2058,12 @@
           "rerank_pass": true
         },
         "top_dense_score": 0.8198,
-        "latency_ms": 2161.0,
+        "latency_ms": 1922.9,
         "timings_ms": {
-          "dense_ms": 545.7,
-          "lexical_ms": 0.5,
-          "fusion_ms": 0.6,
-          "rerank_ms": 1614.2
+          "dense_ms": 579.2,
+          "lexical_ms": 0.4,
+          "fusion_ms": 0.5,
+          "rerank_ms": 1342.8
         },
         "reciprocal_rank": 1.0
       },
@@ -2079,7 +2076,6 @@
           27
         ],
         "retrieved_pages": [
-          25,
           27
         ],
         "page_hit": true,
@@ -2100,18 +2096,18 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.8424,
-          "max_lexical_coverage": 0.5024,
+          "max_lexical_coverage": 0.5026,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6,
           "rerank_pass": true
         },
         "top_dense_score": 0.8424,
-        "latency_ms": 2126.5,
+        "latency_ms": 1697.2,
         "timings_ms": {
-          "dense_ms": 600.7,
-          "lexical_ms": 1.8,
-          "fusion_ms": 0.5,
-          "rerank_ms": 1523.5
+          "dense_ms": 526.3,
+          "lexical_ms": 1.2,
+          "fusion_ms": 1.1,
+          "rerank_ms": 1168.4
         },
         "reciprocal_rank": 1.0
       },
@@ -2151,12 +2147,12 @@
           "rerank_pass": true
         },
         "top_dense_score": 0.8574,
-        "latency_ms": 1962.4,
+        "latency_ms": 1896.4,
         "timings_ms": {
-          "dense_ms": 545.3,
-          "lexical_ms": 1.9,
+          "dense_ms": 539.2,
+          "lexical_ms": 1.8,
           "fusion_ms": 0.5,
-          "rerank_ms": 1414.6
+          "rerank_ms": 1354.7
         },
         "reciprocal_rank": 1.0
       },
@@ -2198,12 +2194,12 @@
           "rerank_pass": true
         },
         "top_dense_score": 0.8364,
-        "latency_ms": 1920.3,
+        "latency_ms": 1808.6,
         "timings_ms": {
-          "dense_ms": 597.5,
-          "lexical_ms": 1.8,
-          "fusion_ms": 0.5,
-          "rerank_ms": 1320.5
+          "dense_ms": 535.3,
+          "lexical_ms": 2.2,
+          "fusion_ms": 0.7,
+          "rerank_ms": 1270.3
         },
         "reciprocal_rank": 1.0
       },
@@ -2245,12 +2241,12 @@
           "rerank_pass": true
         },
         "top_dense_score": 0.8214,
-        "latency_ms": 1954.6,
+        "latency_ms": 1880.4,
         "timings_ms": {
-          "dense_ms": 550.0,
-          "lexical_ms": 0.7,
-          "fusion_ms": 0.4,
-          "rerank_ms": 1403.4
+          "dense_ms": 580.3,
+          "lexical_ms": 1.3,
+          "fusion_ms": 0.7,
+          "rerank_ms": 1298.1
         },
         "reciprocal_rank": 1.0
       },
@@ -2286,18 +2282,18 @@
           "dense_pass": true,
           "lexical_pass": true,
           "max_dense_score": 0.8355,
-          "max_lexical_coverage": 0.6573,
+          "max_lexical_coverage": 0.6578,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6,
           "rerank_pass": true
         },
         "top_dense_score": 0.8355,
-        "latency_ms": 1844.2,
+        "latency_ms": 1771.2,
         "timings_ms": {
-          "dense_ms": 573.6,
-          "lexical_ms": 0.7,
-          "fusion_ms": 0.4,
-          "rerank_ms": 1269.4
+          "dense_ms": 520.0,
+          "lexical_ms": 0.9,
+          "fusion_ms": 0.5,
+          "rerank_ms": 1249.7
         },
         "reciprocal_rank": 1.0
       },
@@ -2330,18 +2326,18 @@
           "dense_pass": true,
           "lexical_pass": true,
           "max_dense_score": 0.8211,
-          "max_lexical_coverage": 0.8905,
+          "max_lexical_coverage": 0.8902,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6,
           "rerank_pass": true
         },
         "top_dense_score": 0.8211,
-        "latency_ms": 1944.6,
+        "latency_ms": 1823.3,
         "timings_ms": {
-          "dense_ms": 555.6,
-          "lexical_ms": 3.6,
+          "dense_ms": 570.5,
+          "lexical_ms": 5.0,
           "fusion_ms": 0.8,
-          "rerank_ms": 1384.5
+          "rerank_ms": 1246.9
         },
         "reciprocal_rank": 1.0
       },
@@ -2375,18 +2371,18 @@
           "dense_pass": true,
           "lexical_pass": true,
           "max_dense_score": 0.7886,
-          "max_lexical_coverage": 0.6796,
+          "max_lexical_coverage": 0.6795,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6,
           "rerank_pass": true
         },
         "top_dense_score": 0.7886,
-        "latency_ms": 1945.2,
+        "latency_ms": 1838.4,
         "timings_ms": {
-          "dense_ms": 545.3,
-          "lexical_ms": 0.3,
-          "fusion_ms": 0.5,
-          "rerank_ms": 1399.0
+          "dense_ms": 533.9,
+          "lexical_ms": 0.4,
+          "fusion_ms": 0.7,
+          "rerank_ms": 1303.4
         },
         "reciprocal_rank": 1.0
       },
@@ -2428,12 +2424,12 @@
           "rerank_pass": true
         },
         "top_dense_score": 0.846,
-        "latency_ms": 1945.2,
+        "latency_ms": 1806.7,
         "timings_ms": {
-          "dense_ms": 542.8,
-          "lexical_ms": 1.0,
-          "fusion_ms": 0.5,
-          "rerank_ms": 1401.0
+          "dense_ms": 561.1,
+          "lexical_ms": 1.1,
+          "fusion_ms": 0.6,
+          "rerank_ms": 1243.8
         },
         "reciprocal_rank": 1.0
       },
@@ -2468,18 +2464,18 @@
           "dense_pass": true,
           "lexical_pass": true,
           "max_dense_score": 0.847,
-          "max_lexical_coverage": 0.8514,
+          "max_lexical_coverage": 0.851,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6,
           "rerank_pass": true
         },
         "top_dense_score": 0.847,
-        "latency_ms": 1844.6,
+        "latency_ms": 1893.2,
         "timings_ms": {
-          "dense_ms": 541.2,
-          "lexical_ms": 1.6,
+          "dense_ms": 509.7,
+          "lexical_ms": 1.7,
           "fusion_ms": 0.5,
-          "rerank_ms": 1301.3
+          "rerank_ms": 1381.2
         },
         "reciprocal_rank": 1.0
       },
@@ -2522,12 +2518,12 @@
           "rerank_pass": true
         },
         "top_dense_score": 0.8317,
-        "latency_ms": 1841.1,
+        "latency_ms": 1793.6,
         "timings_ms": {
-          "dense_ms": 626.0,
-          "lexical_ms": 1.6,
-          "fusion_ms": 0.5,
-          "rerank_ms": 1212.9
+          "dense_ms": 539.6,
+          "lexical_ms": 3.6,
+          "fusion_ms": 1.0,
+          "rerank_ms": 1249.2
         },
         "reciprocal_rank": 1.0
       },
@@ -2562,18 +2558,18 @@
           "dense_pass": true,
           "lexical_pass": true,
           "max_dense_score": 0.8281,
-          "max_lexical_coverage": 0.848,
+          "max_lexical_coverage": 0.8479,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6,
           "rerank_pass": true
         },
         "top_dense_score": 0.8281,
-        "latency_ms": 2254.7,
+        "latency_ms": 1964.1,
         "timings_ms": {
-          "dense_ms": 618.2,
-          "lexical_ms": 1.3,
-          "fusion_ms": 0.4,
-          "rerank_ms": 1634.8
+          "dense_ms": 567.0,
+          "lexical_ms": 1.4,
+          "fusion_ms": 0.7,
+          "rerank_ms": 1394.9
         },
         "reciprocal_rank": 1.0
       },
@@ -2613,12 +2609,12 @@
           "rerank_pass": true
         },
         "top_dense_score": 0.8662,
-        "latency_ms": 2046.7,
+        "latency_ms": 1790.4,
         "timings_ms": {
-          "dense_ms": 530.6,
-          "lexical_ms": 1.3,
-          "fusion_ms": 0.4,
-          "rerank_ms": 1514.2
+          "dense_ms": 525.2,
+          "lexical_ms": 1.1,
+          "fusion_ms": 0.5,
+          "rerank_ms": 1263.6
         },
         "reciprocal_rank": 1.0
       },
@@ -2662,12 +2658,12 @@
           "rerank_pass": true
         },
         "top_dense_score": 0.8381,
-        "latency_ms": 2048.6,
+        "latency_ms": 1890.0,
         "timings_ms": {
-          "dense_ms": 618.8,
-          "lexical_ms": 1.7,
-          "fusion_ms": 0.5,
-          "rerank_ms": 1427.6
+          "dense_ms": 515.4,
+          "lexical_ms": 1.9,
+          "fusion_ms": 0.6,
+          "rerank_ms": 1372.0
         },
         "reciprocal_rank": 1.0
       },
@@ -2711,12 +2707,12 @@
           "rerank_pass": true
         },
         "top_dense_score": 0.8471,
-        "latency_ms": 2150.8,
+        "latency_ms": 1820.0,
         "timings_ms": {
-          "dense_ms": 545.3,
-          "lexical_ms": 0.6,
-          "fusion_ms": 0.4,
-          "rerank_ms": 1604.4
+          "dense_ms": 570.2,
+          "lexical_ms": 0.9,
+          "fusion_ms": 0.7,
+          "rerank_ms": 1248.1
         },
         "reciprocal_rank": 1.0
       },
@@ -2748,12 +2744,12 @@
           "rerank_pass": false
         },
         "top_dense_score": 0.7607,
-        "latency_ms": 1943.5,
+        "latency_ms": 1769.0,
         "timings_ms": {
-          "dense_ms": 632.9,
+          "dense_ms": 524.9,
           "lexical_ms": 0.3,
-          "fusion_ms": 0.6,
-          "rerank_ms": 1309.6
+          "fusion_ms": 1.0,
+          "rerank_ms": 1242.6
         },
         "reciprocal_rank": 0.0
       },
@@ -2785,12 +2781,12 @@
           "rerank_pass": false
         },
         "top_dense_score": 0.7665,
-        "latency_ms": 1807.6,
+        "latency_ms": 1766.0,
         "timings_ms": {
-          "dense_ms": 625.0,
+          "dense_ms": 557.5,
           "lexical_ms": 0.1,
           "fusion_ms": 0.2,
-          "rerank_ms": 1182.3
+          "rerank_ms": 1208.1
         },
         "reciprocal_rank": 0.0
       },
@@ -2822,12 +2818,12 @@
           "rerank_pass": false
         },
         "top_dense_score": 0.7289,
-        "latency_ms": 1936.9,
+        "latency_ms": 1830.9,
         "timings_ms": {
-          "dense_ms": 600.6,
+          "dense_ms": 538.3,
           "lexical_ms": 0.1,
-          "fusion_ms": 0.4,
-          "rerank_ms": 1335.8
+          "fusion_ms": 0.5,
+          "rerank_ms": 1291.9
         },
         "reciprocal_rank": 0.0
       },
@@ -2844,7 +2840,7 @@
         "missing_keywords": [],
         "keyword_hit": false,
         "refused": true,
-        "refusal_reason": "Reranker menilai semua kandidat tidak relevan (skor tertinggi 1.0 < 4.0).",
+        "refusal_reason": "Reranker menilai semua kandidat tidak relevan (skor tertinggi 0.0 < 4.0).",
         "effective_query": "Ceritakan tentang sejarah perang dunia kedua",
         "was_rewritten": false,
         "rerank_failed": false,
@@ -2853,18 +2849,18 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.7466,
-          "max_lexical_coverage": 0.1699,
+          "max_lexical_coverage": 0.17,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6,
           "rerank_pass": false
         },
         "top_dense_score": 0.7466,
-        "latency_ms": 1897.8,
+        "latency_ms": 1855.9,
         "timings_ms": {
-          "dense_ms": 612.1,
+          "dense_ms": 524.2,
           "lexical_ms": 0.3,
-          "fusion_ms": 0.5,
-          "rerank_ms": 1284.8
+          "fusion_ms": 2.2,
+          "rerank_ms": 1329.1
         },
         "reciprocal_rank": 0.0
       },
@@ -2890,18 +2886,18 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.7285,
-          "max_lexical_coverage": 0.1268,
+          "max_lexical_coverage": 0.1272,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6,
           "rerank_pass": false
         },
         "top_dense_score": 0.7285,
-        "latency_ms": 1898.8,
+        "latency_ms": 2095.1,
         "timings_ms": {
-          "dense_ms": 564.5,
-          "lexical_ms": 0.3,
-          "fusion_ms": 0.5,
-          "rerank_ms": 1333.5
+          "dense_ms": 553.6,
+          "lexical_ms": 0.4,
+          "fusion_ms": 0.6,
+          "rerank_ms": 1540.4
         },
         "reciprocal_rank": 0.0
       },
@@ -2936,19 +2932,19 @@
           "dense_pass": true,
           "lexical_pass": false,
           "max_dense_score": 0.8525,
-          "max_lexical_coverage": 0.5963,
+          "max_lexical_coverage": 0.5967,
           "dense_threshold": 0.7,
           "lexical_coverage_threshold": 0.6,
           "rerank_pass": true
         },
         "top_dense_score": 0.8525,
-        "latency_ms": 3108.5,
+        "latency_ms": 3026.6,
         "timings_ms": {
-          "rewrite_ms": 1163.2,
-          "dense_ms": 549.4,
-          "lexical_ms": 2.6,
-          "fusion_ms": 0.5,
-          "rerank_ms": 1392.6
+          "rewrite_ms": 1068.7,
+          "dense_ms": 524.8,
+          "lexical_ms": 2.0,
+          "fusion_ms": 0.6,
+          "rerank_ms": 1430.4
         },
         "reciprocal_rank": 1.0
       },
@@ -2987,13 +2983,13 @@
           "rerank_pass": true
         },
         "top_dense_score": 0.7618,
-        "latency_ms": 2049.2,
+        "latency_ms": 1832.5,
         "timings_ms": {
-          "rewrite_ms": 0.1,
-          "dense_ms": 539.3,
-          "lexical_ms": 0.4,
-          "fusion_ms": 0.5,
-          "rerank_ms": 1508.7
+          "rewrite_ms": 0.2,
+          "dense_ms": 550.8,
+          "lexical_ms": 0.5,
+          "fusion_ms": 0.6,
+          "rerank_ms": 1280.3
         },
         "reciprocal_rank": 1.0
       }

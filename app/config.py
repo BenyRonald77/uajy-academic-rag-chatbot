@@ -30,7 +30,13 @@ INDEX_INFO_PATH = INDEX_DIR / "index_info.json"
 # ──────────────────────────────────────────────
 
 #: Model utama untuk menghasilkan jawaban akhir.
-LLM_MODEL = "gemini-2.5-flash"
+#:
+#: Pendahulunya, ``gemini-2.5-flash``, kini menolak permintaan dengan 404
+#: ("no longer available to new users") — persis seperti yang lebih dulu
+#: terjadi pada ``gemini-2.5-flash-lite``. Model Gemini dihapus tanpa
+#: pemberitahuan di dalam kode, jadi nama model tunggal bukan konfigurasi yang
+#: aman. Lihat `LLM_MODEL_FALLBACKS` di bawah.
+LLM_MODEL = "gemini-3.6-flash"
 
 #: Model murah & cepat untuk tugas bantu (rerank, query rewriting).
 #:
@@ -47,7 +53,28 @@ LLM_MODEL = "gemini-2.5-flash"
 UTILITY_MODEL = "gemini-3.5-flash-lite"
 
 #: Model embedding untuk chunk dokumen dan query.
+#:
+#: JANGAN diubah tanpa membangun ulang index. Query harus di-embed oleh model
+#: yang sama dengan yang membangun vektornya, kalau tidak seluruh skor
+#: kemiripan menjadi tidak bermakna. Karena itu model embedding tidak diberi
+#: rantai fallback: berpindah diam-diam justru merusak retrieval.
 EMBEDDING_MODEL = "gemini-embedding-001"
+
+#: Model pengganti bila model utama tidak tersedia, dicoba berurutan.
+#:
+#: Dua model sudah dihapus di tengah masa hidup proyek ini, dan `models.list()`
+#: tetap melaporkannya tersedia sehingga kegagalannya baru muncul saat
+#: dipanggil sungguhan. Tanpa rantai ini, penghapusan model berikutnya akan
+#: menampilkan galat 404 mentah kepada mahasiswa di jendela chat.
+#:
+#: Perpindahan hanya dilakukan untuk galat yang khas per-model (404 model
+#: hilang, 503 model kelebihan beban). Galat kuota 429 bersifat akun, bukan
+#: model, jadi berpindah model tidak menolong dan hanya menghabiskan sisa
+#: kuota lebih cepat.
+MODEL_FALLBACKS: dict[str, tuple[str, ...]] = {
+    "gemini-3.6-flash": ("gemini-3.5-flash", "gemini-3.8-flash"),
+    "gemini-3.5-flash-lite": ("gemini-3.6-flash", "gemini-3.5-flash"),
+}
 
 #: Suhu rendah untuk jawaban faktual.
 ANSWER_TEMPERATURE = 0.2
@@ -100,6 +127,10 @@ class RetrievalConfig:
     use_hybrid: bool = True
     use_rerank: bool = True
     use_query_rewrite: bool = True
+
+    # Batasi pencarian ke dokumen tertentu. Tuple kosong berarti semua
+    # dokumen. Berupa tuple, bukan list, agar dataclass ini tetap frozen.
+    document_filter: tuple[str, ...] = ()
 
     # Konstanta Reciprocal Rank Fusion. 60 adalah nilai standar dari paper
     # Cormack et al. (2009); makin besar makin datar bobot antar peringkat.

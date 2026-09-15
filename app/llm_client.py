@@ -26,6 +26,7 @@ from app.config import (
     EMBED_MAX_RETRIES,
     EMBEDDING_MODEL,
     LLM_MODEL,
+    MODEL_FALLBACKS,
     PROJECT_ROOT,
     UTILITY_MODEL,
     UTILITY_TEMPERATURE,
@@ -133,13 +134,30 @@ def call_llm(
     max_tokens: int = ANSWER_MAX_TOKENS,
     model: str = LLM_MODEL,
     api_key: str | None = None,
+    raise_on_error: bool = False,
 ) -> str:
     """
     Panggil Gemini untuk menghasilkan jawaban akhir.
 
-    Mengembalikan pesan error yang ramah pengguna alih-alih raise, karena
-    hasilnya langsung ditampilkan di chat.
+    Args:
+        raise_on_error: Bila ``True``, kegagalan dilempar sebagai exception
+            alih-alih dikembalikan sebagai pesan. UI memerlukan pesan yang
+            ramah untuk ditampilkan di chat, tetapi runner evaluasi
+            memerlukan kegagalan yang bisa dibedakan: pesan error yang
+            diperlakukan sebagai jawaban akan merusak metriknya — penilai
+            groundedness bahkan memberi nilai sempurna pada pesan error,
+            sebab pesan itu memang tidak memuat klaim faktual apa pun.
     """
+    if raise_on_error:
+        return _generate(
+            prompt=prompt,
+            system_instruction=system_instruction,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            model=model,
+            api_key=api_key,
+        )
+
     try:
         text = _generate(
             prompt=prompt,
@@ -190,14 +208,66 @@ def call_utility_llm(
     )
 
 
-def _generate(
+#: Galat yang menandakan model itu sendiri tidak bisa dipakai: 404 berarti
+#: model sudah dihapus, 503 berarti sedang kelebihan beban. Keduanya khas
+#: per-model, sehingga berpindah ke model lain masuk akal.
+#:
+#: Galat kuota (429) sengaja TIDAK disertakan. Batas kuota berlaku pada akun,
+#: bukan pada model, jadi berpindah model tidak menolong dan justru
+#: menghabiskan sisa kuota lebih cepat.
+_MODEL_UNAVAILABLE_MARKERS = ("404", "NOT_FOUND", "503", "UNAVAILABLE")
+
+#: Model yang terbukti bisa dipanggil, dipetakan dari model utama yang diminta.
+#: Tanpa ingatan ini, setiap permintaan akan menabrak model yang sudah mati
+#: lebih dulu dan menambah satu perjalanan jaringan yang pasti gagal.
+_WORKING_MODEL: dict[str, str] = {}
+
+
+def _is_model_unavailable(error: Exception) -> bool:
+    """True bila galat menandakan modelnya yang bermasalah, bukan permintaannya."""
+    message = str(error)
+    return any(marker in message for marker in _MODEL_UNAVAILABLE_MARKERS)
+
+
+def model_chain(primary: str) -> list[str]:
+    """
+    Urutan model yang dicoba untuk sebuah model utama.
+
+    Model yang sebelumnya terbukti bekerja diletakkan paling depan, tetapi
+    sisanya tetap dipertahankan sebagai cadangan agar sistem bisa pulih bila
+    model itu pun kemudian ikut dihapus.
+    """
+    configured = [primary, *MODEL_FALLBACKS.get(primary, ())]
+
+    working = _WORKING_MODEL.get(primary)
+    if working and working in configured:
+        return [working] + [m for m in configured if m != working]
+    return configured
+
+
+def effective_model(primary: str) -> str:
+    """
+    Model yang sedang benar-benar dipakai untuk `primary`.
+
+    Dipakai UI agar yang ditampilkan adalah kenyataan, bukan konfigurasi yang
+    barangkali sudah digantikan oleh fallback.
+    """
+    return _WORKING_MODEL.get(primary, primary)
+
+
+def reset_model_cache() -> None:
+    """Lupakan model yang tercatat bekerja. Terutama berguna untuk pengujian."""
+    _WORKING_MODEL.clear()
+
+
+def _generate_once(
     prompt: str,
     system_instruction: str,
     temperature: float,
     max_tokens: int,
     model: str,
     api_key: str | None,
-    response_mime_type: str | None = None,
+    response_mime_type: str | None,
 ) -> str:
     client = get_client(api_key)
     config = genai_types.GenerateContentConfig(
@@ -208,6 +278,50 @@ def _generate(
     )
     response = client.models.generate_content(model=model, contents=prompt, config=config)
     return (response.text or "").strip()
+
+
+def _generate(
+    prompt: str,
+    system_instruction: str,
+    temperature: float,
+    max_tokens: int,
+    model: str,
+    api_key: str | None,
+    response_mime_type: str | None = None,
+) -> str:
+    """
+    Hasilkan teks, berpindah ke model cadangan bila modelnya tidak tersedia.
+
+    Raises:
+        Exception: galat terakhir, bila seluruh model pada rantai gagal.
+    """
+    chain = model_chain(model)
+    last_error: Exception | None = None
+
+    for candidate in chain:
+        try:
+            text = _generate_once(
+                prompt=prompt,
+                system_instruction=system_instruction,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                model=candidate,
+                api_key=api_key,
+                response_mime_type=response_mime_type,
+            )
+        except Exception as e:
+            last_error = e
+            # Galat non-model (kuota, autentikasi, permintaan salah) tidak akan
+            # membaik dengan berpindah model, jadi diteruskan apa adanya.
+            if not _is_model_unavailable(e):
+                raise
+            continue
+
+        if candidate != model:
+            _WORKING_MODEL[model] = candidate
+        return text
+
+    raise last_error if last_error else LLMCallError("Tidak ada model yang bisa dipanggil.")
 
 
 # ──────────────────────────────────────────────

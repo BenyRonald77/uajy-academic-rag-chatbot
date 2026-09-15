@@ -1,0 +1,39 @@
+name: tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 adalah versi minimum: modul secrets memakai `tomllib`.
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      # Seluruh test unit bersifat murni logika: tidak ada panggilan jaringan
+      # dan tidak butuh GEMINI_API_KEY. Karena itu suite ini aman dijalankan
+      # pada pull request dari fork.
+      - name: Run tests
+        run: python -m pytest -v
+
+      - name: Verify ingestion pipeline runs without API calls
+        run: python ingestion/build_index.py --dry-run

@@ -1,11 +1,57 @@
 {
-  "built_at": "2026-09-14T07:12:40+00:00",
-  "source_pdf": {
-    "name": "Buku-Pedoman-Akademik-Fakultas-Teknologi-Industri-2025-2026.pdf",
-    "sha256": "0c2dfd05681978bc2bf9f2ec05c33e5e249d6857cde174d116f4a8085d8c25e5",
-    "size_bytes": 66122322,
-    "pages_with_text": 83
-  },
+  "built_at": "2026-09-14T08:12:11+00:00",
+  "source_documents": [
+    {
+      "name": "Buku-Pedoman-Akademik-Fakultas-Teknologi-Industri-2025-2026.pdf",
+      "sha256": "0c2dfd05681978bc2bf9f2ec05c33e5e249d6857cde174d116f4a8085d8c25e5",
+      "size_bytes": 66122322,
+      "pages_with_text": 83,
+      "chunks": 222,
+      "extraction": {
+        "lines_raw": 5518,
+        "lines_kept": 4206,
+        "dropped": {
+          "header/footer berjalan": 83,
+          "kode glyph (cid:NN)": 140,
+          "baris terlalu pendek": 614,
+          "baris duplikat berurutan": 82,
+          "nomor halaman": 198,
+          "teks rusak (rotasi/terjalin)": 195
+        },
+        "pages_empty_after_cleaning": [
+          12,
+          14,
+          16,
+          20,
+          24,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          61,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          77,
+          82,
+          83,
+          84,
+          89,
+          90,
+          91,
+          92
+        ]
+      }
+    }
+  ],
   "embedding": {
     "model": "gemini-embedding-001",
     "task_type": "RETRIEVAL_DOCUMENT",
@@ -20,77 +66,12 @@
     "max_pages_per_chunk": 3
   },
   "stats": {
-    "total_chunks": 219,
+    "total_documents": 1,
+    "total_chunks": 222,
     "total_pages": 78,
-    "page_range": "3-116",
     "max_pages_per_chunk": 4,
-    "avg_pages_per_chunk": 1.29,
-    "single_page_chunks": 166,
-    "avg_chars_per_chunk": 1079
-  },
-  "extraction": {
-    "lines_raw": 5518,
-    "lines_kept": 4196,
-    "dropped": {
-      "header/footer berjalan": 83,
-      "kode glyph (cid:NN)": 140,
-      "baris terlalu pendek": 614,
-      "baris duplikat berurutan": 82,
-      "nomor halaman": 198,
-      "teks rusak (rotasi/terjalin)": 205
-    },
-    "pages_empty_after_cleaning": [
-      12,
-      14,
-      16,
-      20,
-      24,
-      53,
-      54,
-      55,
-      56,
-      57,
-      58,
-      59,
-      61,
-      66,
-      67,
-      68,
-      69,
-      70,
-      71,
-      72,
-      73,
-      77,
-      82,
-      83,
-      84,
-      89,
-      90,
-      91,
-      92
-    ],
-    "noisy_pages": [
-      {
-        "page": 7,
-        "noise_ratio": 0.99
-      },
-      {
-        "page": 21,
-        "noise_ratio": 0.869
-      },
-      {
-        "page": 35,
-        "noise_ratio": 0.829
-      },
-      {
-        "page": 31,
-        "noise_ratio": 0.586
-      },
-      {
-        "page": 46,
-        "noise_ratio": 0.524
-      }
-    ]
+    "avg_pages_per_chunk": 1.28,
+    "single_page_chunks": 170,
+    "avg_chars_per_chunk": 1073
   }
 }

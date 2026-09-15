@@ -6,23 +6,25 @@ Usage:
     # Lihat hasil chunking tanpa memanggil API sama sekali (gratis)
     python ingestion/build_index.py --dry-run
 
-    # Bangun index (menimpa index yang ada, memakai kuota embedding)
+    # Bangun index dari seluruh PDF di folder data/
     python ingestion/build_index.py --yes
 
-    # Dokumen lain
-    python ingestion/build_index.py --pdf path/to/dokumen.pdf --yes
+    # Dokumen tertentu saja (boleh diulang)
+    python ingestion/build_index.py --pdf data/pedoman.pdf --pdf data/kalender.pdf --yes
 
-Selain `faiss.index` dan `metadata.json`, pipeline ini juga menulis
-`index_info.json` yang mencatat asal-usul index: hash PDF sumber, model
-embedding, task type, dan parameter chunking. Berkat catatan itu aplikasi
-tahu index sudah usang bila PDF berubah, dan retriever tahu task type mana
-yang harus dipakai saat meng-embed pertanyaan pengguna.
+Satu index memuat banyak dokumen. Setiap chunk mencatat dokumen asalnya,
+sebab nomor halaman hanya bermakna dalam konteks dokumennya — "halaman 48"
+pada pedoman akademik dan pada SK Rektor adalah dua hal berbeda.
+
+Selain `faiss.index` dan `metadata.json`, pipeline ini menulis
+`index_info.json` yang mencatat hash SHA-256 setiap dokumen sumber. Berkat
+catatan itu aplikasi bisa memberi tahu bahwa index sudah usang ketika dokumen
+sumbernya diperbarui.
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 from datetime import datetime, timezone
@@ -43,26 +45,52 @@ from app.config import (
     INDEX_DIR,
     MIN_CHUNK_SIZE,
 )
-from ingestion.chunking import MAX_PAGES_PER_CHUNK, Chunk, chunk_pages
+from app.index_status import file_sha256
+from ingestion.chunking import MAX_PAGES_PER_CHUNK, Chunk, chunk_pages, print_chunk_stats
 from ingestion.extract_text import ExtractionReport, extract_text_with_report
 
-DEFAULT_PDF_PATH = (
-    DATA_DIR / "Buku-Pedoman-Akademik-Fakultas-Teknologi-Industri-2025-2026.pdf"
-)
+
+# ──────────────────────────────────────────────
+# Penemuan dokumen
+# ──────────────────────────────────────────────
+
+def discover_pdfs(paths: list[str] | None, data_dir: Path = DATA_DIR) -> list[Path]:
+    """
+    Tentukan daftar PDF yang akan diproses.
+
+    Args:
+        paths: Path eksplisit dari CLI. Boleh berupa berkas maupun folder.
+            Bila ``None``, seluruh PDF di ``data_dir`` dipakai.
+        data_dir: Folder dokumen bawaan.
+
+    Returns:
+        Daftar path PDF, terurut dan tanpa duplikat.
+    """
+    if not paths:
+        return sorted(data_dir.glob("*.pdf"))
+
+    hasil: list[Path] = []
+    for raw in paths:
+        path = Path(raw)
+        if path.is_dir():
+            hasil.extend(sorted(path.glob("*.pdf")))
+        else:
+            hasil.append(path)
+
+    # Buang duplikat tetapi jaga urutannya.
+    unik: list[Path] = []
+    terlihat: set[Path] = set()
+    for path in hasil:
+        resolved = path.resolve()
+        if resolved not in terlihat:
+            terlihat.add(resolved)
+            unik.append(path)
+    return unik
 
 
 # ──────────────────────────────────────────────
-# Helper
+# Index & metadata
 # ──────────────────────────────────────────────
-
-def file_sha256(path: Path) -> str:
-    """Hash SHA-256 sebuah file, dibaca bertahap agar hemat memori."""
-    digest = hashlib.sha256()
-    with open(path, "rb") as f:
-        for block in iter(lambda: f.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
 
 def build_faiss_index(embeddings: list[list[float]]):
     """
@@ -96,6 +124,7 @@ def chunks_to_metadata(chunks: list[Chunk]) -> list[dict]:
     return [
         {
             "chunk_index": chunk.chunk_index,
+            "source_document": chunk.source_document,
             "text": chunk.text,
             "page_numbers": chunk.page_numbers,
             "page_start": chunk.page_start,
@@ -110,25 +139,22 @@ def chunks_to_metadata(chunks: list[Chunk]) -> list[dict]:
 
 
 def build_index_info(
-    pdf_path: Path,
+    documents: list[dict],
     chunks: list[Chunk],
-    pages: list[tuple[int, str]],
-    report: ExtractionReport,
     embedding_dimension: int,
     task_type: str,
 ) -> dict:
     """Catatan asal-usul index, disimpan sebagai `index_info.json`."""
     spans = [len(chunk.page_numbers) for chunk in chunks]
-    all_pages = sorted({page for chunk in chunks for page in chunk.page_numbers})
+    pages_per_doc: dict[str, set[int]] = {}
+    for chunk in chunks:
+        pages_per_doc.setdefault(chunk.source_document, set()).update(chunk.page_numbers)
+
+    total_pages = sum(len(pages) for pages in pages_per_doc.values())
 
     return {
         "built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "source_pdf": {
-            "name": pdf_path.name,
-            "sha256": file_sha256(pdf_path),
-            "size_bytes": pdf_path.stat().st_size,
-            "pages_with_text": len(pages),
-        },
+        "source_documents": documents,
         "embedding": {
             "model": EMBEDDING_MODEL,
             "task_type": task_type,
@@ -145,25 +171,15 @@ def build_index_info(
             "max_pages_per_chunk": MAX_PAGES_PER_CHUNK,
         },
         "stats": {
+            "total_documents": len(documents),
             "total_chunks": len(chunks),
-            "total_pages": len(all_pages),
-            "page_range": f"{all_pages[0]}-{all_pages[-1]}" if all_pages else "N/A",
+            "total_pages": total_pages,
             "max_pages_per_chunk": max(spans) if spans else 0,
             "avg_pages_per_chunk": round(sum(spans) / len(spans), 2) if spans else 0,
             "single_page_chunks": sum(1 for s in spans if s == 1),
             "avg_chars_per_chunk": (
                 round(sum(c.char_count for c in chunks) / len(chunks)) if chunks else 0
             ),
-        },
-        "extraction": {
-            "lines_raw": report.lines_raw,
-            "lines_kept": report.lines_kept,
-            "dropped": dict(report.dropped),
-            "pages_empty_after_cleaning": report.pages_empty_after_cleaning,
-            "noisy_pages": [
-                {"page": page, "noise_ratio": round(ratio, 3)}
-                for page, ratio in report.noisy_pages
-            ],
         },
     }
 
@@ -193,30 +209,64 @@ def save_index(index, metadata: list[dict], info: dict, index_dir: Path) -> None
 # Pipeline
 # ──────────────────────────────────────────────
 
-def prepare_chunks(pdf_path: Path) -> tuple[list[Chunk], list[tuple[int, str]], ExtractionReport]:
+def prepare_chunks(
+    pdf_paths: list[Path],
+) -> tuple[list[Chunk], list[dict]]:
     """
     Jalankan tahap yang tidak memerlukan API: ekstraksi teks dan chunking.
 
-    Dipisah agar `--dry-run` bisa memakai jalur kode yang persis sama dengan
-    build sungguhan, tanpa mengeluarkan biaya sepeser pun.
+    Dipisah agar `--dry-run` memakai jalur kode yang persis sama dengan build
+    sungguhan, tanpa mengeluarkan biaya sepeser pun.
+
+    Returns:
+        Tuple ``(chunks, catatan dokumen)``. ``chunk_index`` bersifat unik
+        global sehingga tetap sejajar dengan posisi vector di FAISS.
     """
-    print(f"\n📖 Step 1: Mengekstrak teks dari '{pdf_path.name}'...")
-    pages, report = extract_text_with_report(pdf_path)
-    if not pages:
-        print("❌ Tidak ada teks yang bisa diekstrak dari PDF!")
-        sys.exit(1)
+    semua_chunk: list[Chunk] = []
+    catatan: list[dict] = []
 
-    print("\n✂️  Step 2: Membagi teks menjadi chunk...")
-    chunks = chunk_pages(pages)
-    if not chunks:
-        print("❌ Tidak ada chunk yang dihasilkan!")
-        sys.exit(1)
+    for nomor, pdf_path in enumerate(pdf_paths, start=1):
+        print(f"\n{'─' * 62}")
+        print(f"📖 Dokumen {nomor}/{len(pdf_paths)}: {pdf_path.name}")
+        print(f"{'─' * 62}")
 
-    return chunks, pages, report
+        pages, report = extract_text_with_report(pdf_path)
+        if not pages:
+            print(f"⚠️  Dilewati: tidak ada teks yang bisa diekstrak.")
+            continue
+
+        chunks = chunk_pages(pages)
+        if not chunks:
+            print(f"⚠️  Dilewati: tidak ada chunk yang dihasilkan.")
+            continue
+
+        for chunk in chunks:
+            chunk.source_document = pdf_path.name
+
+        semua_chunk.extend(chunks)
+        catatan.append({
+            "name": pdf_path.name,
+            "sha256": file_sha256(pdf_path),
+            "size_bytes": pdf_path.stat().st_size,
+            "pages_with_text": len(pages),
+            "chunks": len(chunks),
+            "extraction": {
+                "lines_raw": report.lines_raw,
+                "lines_kept": report.lines_kept,
+                "dropped": dict(report.dropped),
+                "pages_empty_after_cleaning": report.pages_empty_after_cleaning,
+            },
+        })
+
+    # Nomor ulang secara global supaya sejajar dengan urutan vector FAISS.
+    for i, chunk in enumerate(semua_chunk):
+        chunk.chunk_index = i
+
+    return semua_chunk, catatan
 
 
 def run_ingestion(
-    pdf_path: str | Path,
+    pdf_paths: list[Path],
     api_key: str | None = None,
     dry_run: bool = False,
     index_dir: Path = INDEX_DIR,
@@ -225,30 +275,40 @@ def run_ingestion(
     Jalankan pipeline ingestion lengkap.
 
     Args:
-        pdf_path: Path ke PDF sumber.
+        pdf_paths: Daftar PDF sumber.
         api_key: Override API key Gemini.
         dry_run: Berhenti setelah chunking, tanpa memanggil API.
         index_dir: Folder tujuan penyimpanan index.
     """
-    pdf_path = Path(pdf_path)
-
     print("=" * 62)
     print("🚀 INGESTION PIPELINE — RAG Chatbot Kampus UAJY")
+    print(f"   Dokumen: {len(pdf_paths)}")
     if dry_run:
         print("   MODE: dry-run (tanpa panggilan API, tanpa menulis index)")
     print("=" * 62)
 
-    chunks, pages, report = prepare_chunks(pdf_path)
+    chunks, documents = prepare_chunks(pdf_paths)
+    if not chunks:
+        print("\n❌ Tidak ada chunk yang dihasilkan dari dokumen mana pun!")
+        sys.exit(1)
+
+    if len(documents) > 1:
+        print(f"\n{'─' * 62}")
+        print("📚 Gabungan seluruh dokumen")
+        print(f"{'─' * 62}")
+        for doc in documents:
+            print(f"   {doc['name']}: {doc['chunks']} chunk dari "
+                  f"{doc['pages_with_text']} halaman")
+        print_chunk_stats(chunks)
 
     if dry_run:
-        print("\n🔍 Step 3: Contoh chunk hasil pemotongan")
+        print("\n🔍 Contoh chunk hasil pemotongan")
         for chunk in chunks[:3]:
             heading = " > ".join(chunk.heading_path) or "-"
-            print(f"\n   --- chunk {chunk.chunk_index} | halaman {chunk.page_label} "
-                  f"| {chunk.char_count} karakter ---")
+            print(f"\n   --- chunk {chunk.chunk_index} | {chunk.source_document} "
+                  f"| halaman {chunk.page_label} | {chunk.char_count} karakter ---")
             print(f"   heading : {heading}")
-            preview = chunk.text[:220].replace("\n", " ⏎ ")
-            print(f"   teks    : {preview}")
+            print(f"   teks    : {chunk.text[:200].replace(chr(10), ' ⏎ ')}")
 
         print("\n" + "=" * 62)
         print("✅ DRY-RUN SELESAI — tidak ada biaya API dan index tidak diubah.")
@@ -257,12 +317,11 @@ def run_ingestion(
         return
 
     # Teks yang diembed menyertakan heading path, bukan hanya isi paragraf.
-    print(f"\n🧮 Step 3: Meng-embed {len(chunks)} chunk via Gemini API...")
+    print(f"\n🧮 Meng-embed {len(chunks)} chunk via Gemini API...")
     from app.llm_client import TASK_TYPE_DOCUMENT, embed_texts
 
-    texts = [chunk.embed_text for chunk in chunks]
     embeddings = embed_texts(
-        texts,
+        [chunk.embed_text for chunk in chunks],
         task_type=TASK_TYPE_DOCUMENT,
         api_key=api_key,
         progress=True,
@@ -273,25 +332,22 @@ def run_ingestion(
               f"jumlah chunk ({len(chunks)}). Index dibatalkan.")
         sys.exit(1)
 
-    print("\n💾 Step 4: Membangun dan menyimpan index...")
+    print("\n💾 Membangun dan menyimpan index...")
     index = build_faiss_index(embeddings)
-    metadata = chunks_to_metadata(chunks)
     info = build_index_info(
-        pdf_path=pdf_path,
+        documents=documents,
         chunks=chunks,
-        pages=pages,
-        report=report,
         embedding_dimension=len(embeddings[0]),
         task_type=TASK_TYPE_DOCUMENT,
     )
-    save_index(index, metadata, info, index_dir)
+    save_index(index, chunks_to_metadata(chunks), info, index_dir)
 
     stats = info["stats"]
     print("\n" + "=" * 62)
     print("✅ INGESTION SELESAI")
-    print(f"   📄 PDF            : {pdf_path.name}")
-    print(f"   📝 Halaman        : {len(pages)}")
-    print(f"   ✂️  Chunk          : {len(chunks)}")
+    print(f"   📚 Dokumen        : {stats['total_documents']}")
+    print(f"   📝 Halaman        : {stats['total_pages']}")
+    print(f"   ✂️  Chunk          : {stats['total_chunks']}")
     print(f"   🎯 Halaman/chunk  : maks {stats['max_pages_per_chunk']}, "
           f"rata-rata {stats['avg_pages_per_chunk']}")
     print(f"   🧮 Dimensi vector : {info['embedding']['dimension']}")
@@ -328,13 +384,15 @@ def main() -> None:
     enable_utf8_stdout()
 
     parser = argparse.ArgumentParser(
-        description="Bangun FAISS index dari dokumen PDF kampus",
+        description="Bangun FAISS index dari satu atau beberapa dokumen PDF kampus",
     )
     parser.add_argument(
         "--pdf",
-        type=str,
-        default=str(DEFAULT_PDF_PATH),
-        help=f"Path ke file PDF (default: {DEFAULT_PDF_PATH.name})",
+        action="append",
+        default=None,
+        metavar="PATH",
+        help="Berkas PDF atau folder. Boleh diulang. "
+             f"Default: seluruh PDF di {DATA_DIR.name}/",
     )
     parser.add_argument(
         "--api-key",
@@ -354,9 +412,16 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    pdf_path = Path(args.pdf)
-    if not pdf_path.exists():
-        print(f"❌ File PDF tidak ditemukan: {pdf_path}")
+    pdf_paths = discover_pdfs(args.pdf)
+    if not pdf_paths:
+        lokasi = ", ".join(args.pdf) if args.pdf else str(DATA_DIR)
+        print(f"❌ Tidak ada berkas PDF yang ditemukan di: {lokasi}")
+        sys.exit(1)
+
+    hilang = [p for p in pdf_paths if not p.exists()]
+    if hilang:
+        for path in hilang:
+            print(f"❌ File PDF tidak ditemukan: {path}")
         sys.exit(1)
 
     if not args.dry_run:
@@ -371,7 +436,7 @@ def main() -> None:
             print(f"❌ {e}")
             sys.exit(1)
 
-    run_ingestion(pdf_path, api_key=args.api_key, dry_run=args.dry_run)
+    run_ingestion(pdf_paths, api_key=args.api_key, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":
