@@ -19,6 +19,12 @@ import streamlit as st
 # Tambahkan root project ke sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app.answer_guard import is_safe_answer
+from app.citations import (
+    citation_pages_are_in_context,
+    extract_cited_pages,
+    strip_inline_source_lines,
+)
 from app.config import (
     DEFAULT_RETRIEVAL_CONFIG,
     EMBEDDING_MODEL,
@@ -27,8 +33,21 @@ from app.config import (
     RetrievalConfig,
 )
 from app.llm_client import LLMConfigError, call_llm, effective_model
+from app.pdf_viewer import render_pdf_viewer, render_source_references
 from app.prompt_builder import build_no_context_response, build_prompt
-from app.retrieval import DocumentRetriever, RetrievalOutcome, format_sources
+from app.public_config import (
+    app_mode,
+    is_operator_mode,
+    public_rate_limit,
+    public_rate_window_seconds,
+)
+from app.rate_limit import SessionRateLimiter
+from app.retrieval import (
+    DocumentRetriever,
+    RetrievalOutcome,
+    build_source_references,
+    format_sources,
+)
 from app.theme import (
     inject_theme,
     nav_label,
@@ -238,7 +257,12 @@ def render_hero() -> None:
 # View 1: Tanya Jawab (Chatbot)
 # ──────────────────────────────────────────────
 
-def render_chat_view(retriever: DocumentRetriever | None, config: RetrievalConfig) -> None:
+def render_chat_view(
+    retriever: DocumentRetriever | None,
+    config: RetrievalConfig,
+    operator_mode: bool = False,
+    rate_limiter: SessionRateLimiter | None = None,
+) -> None:
     st.header("Tanya Jawab Akademik")
     render_lead(
         "Ajukan pertanyaan dalam Bahasa Indonesia seputar ketentuan akademik, "
@@ -246,7 +270,16 @@ def render_chat_view(retriever: DocumentRetriever | None, config: RetrievalConfi
     )
 
     if not retriever:
-        st.error("Index dokumen belum ditemukan. Jalankan `python ingestion/build_index.py` terlebih dahulu.")
+        if operator_mode:
+            st.error(
+                "Index dokumen belum ditemukan. Jalankan "
+                "`python ingestion/build_index.py` terlebih dahulu."
+            )
+        else:
+            st.error(
+                "Layanan chatbot sedang dipersiapkan. Silakan coba lagi nanti "
+                "atau hubungi administrator."
+            )
         return
 
     # Preset Questions Picker
@@ -281,12 +314,20 @@ def render_chat_view(retriever: DocumentRetriever | None, config: RetrievalConfi
         with st.chat_message(msg["role"], avatar="🧑‍🎓" if msg["role"] == "user" else "🎓"):
             st.markdown(msg["content"])
             if msg["role"] == "assistant":
-                if msg.get("sources"):
+                if msg.get("source_refs"):
+                    render_source_references(
+                        msg["source_refs"],
+                        key_prefix=f"history_{msg.get('message_id', id(msg))}",
+                        public=not operator_mode,
+                    )
+                elif msg.get("sources"):
+                    # Kompatibilitas dengan riwayat lama sebelum source_refs
+                    # disimpan secara terstruktur.
                     st.markdown(
-                        f'<div class="source-box"><strong>📚 Sumber Referensi:</strong><br>{msg["sources"]}</div>',
+                        f'<div class="source-box"><strong>📚 Sumber Dokumen:</strong><br>{msg["sources"]}</div>',
                         unsafe_allow_html=True,
                     )
-                if msg.get("debug"):
+                if operator_mode and msg.get("debug"):
                     render_retrieval_debug(msg["debug"])
 
     # Process queued query from preset if any
@@ -298,10 +339,36 @@ def render_chat_view(retriever: DocumentRetriever | None, config: RetrievalConfi
     query = input_query or chat_input
 
     if query:
-        _handle_query(query, retriever, config)
+        _handle_query(
+            query,
+            retriever,
+            config,
+            operator_mode=operator_mode,
+            rate_limiter=rate_limiter,
+        )
+
+    render_pdf_viewer()
 
 
-def _handle_query(query: str, retriever: DocumentRetriever, config: RetrievalConfig) -> None:
+def _handle_query(
+    query: str,
+    retriever: DocumentRetriever,
+    config: RetrievalConfig,
+    operator_mode: bool = False,
+    rate_limiter: SessionRateLimiter | None = None,
+) -> None:
+    if rate_limiter is not None:
+        limit_result = rate_limiter.check_and_consume(st.session_state)
+        if not limit_result.allowed:
+            menit = max(1, (limit_result.retry_after_seconds + 59) // 60)
+            st.warning(
+                f"Batas pertanyaan sementara tercapai "
+                f"({limit_result.limit} pertanyaan per jam). "
+                f"Silakan coba lagi sekitar {menit} menit lagi.",
+                icon="⏳",
+            )
+            return
+
     st.session_state.messages.append({"role": "user", "content": query})
     with st.chat_message("user", avatar="🧑‍🎓"):
         st.markdown(query)
@@ -326,18 +393,31 @@ def _handle_query(query: str, retriever: DocumentRetriever, config: RetrievalCon
                     config=config,
                     chat_history=chat_history,
                 )
-        except LLMConfigError as e:
-            st.error(f"⚠️ {e}")
+        except LLMConfigError as error:
+            if operator_mode:
+                st.error(f"⚠️ {error}")
+            else:
+                st.error(
+                    "Layanan pencarian belum siap. Silakan hubungi administrator.",
+                    icon="⚠️",
+                )
             st.session_state.messages.pop()
             return
-        except Exception as e:
-            st.error(f"⚠️ Gagal melakukan pencarian: {e}")
+        except Exception as error:
+            if operator_mode:
+                st.error(f"⚠️ Gagal melakukan pencarian: {error}")
+            else:
+                st.error(
+                    "Layanan pencarian sedang mengalami gangguan. "
+                    "Silakan coba lagi nanti.",
+                    icon="⚠️",
+                )
             st.session_state.messages.pop()
             return
 
         debug = outcome_to_debug(outcome)
 
-        if outcome.was_rewritten:
+        if outcome.was_rewritten and operator_mode:
             st.caption(
                 f"🔁 Pertanyaan ditulis ulang untuk pencarian: "
                 f"*{outcome.effective_query}*"
@@ -346,7 +426,8 @@ def _handle_query(query: str, retriever: DocumentRetriever, config: RetrievalCon
         if outcome.refused:
             response = build_no_context_response()
             st.markdown(response)
-            render_retrieval_debug(debug)
+            if operator_mode:
+                render_retrieval_debug(debug)
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": response,
@@ -360,21 +441,58 @@ def _handle_query(query: str, retriever: DocumentRetriever, config: RetrievalCon
             )
             response = call_llm(user_prompt, system_instruction=system_prompt)
 
-        st.markdown(response)
-
-        sources_text = format_sources(outcome.contexts)
-        if sources_text:
-            st.markdown(
-                f'<div class="source-box"><strong>📚 Sumber Referensi:</strong><br>{sources_text}</div>',
-                unsafe_allow_html=True,
+        if not is_safe_answer(response) or not citation_pages_are_in_context(
+            response, outcome.contexts
+        ):
+            # Circuit breaker public: provider yang mengabaikan prompt atau
+            # mengembalikan sitasi di luar konteks tidak boleh ditampilkan
+            # sebagai jawaban akademik.
+            if operator_mode:
+                st.error(
+                    "Provider chat tidak mengembalikan jawaban dengan format "
+                    "akademik yang valid (sitasi halaman tidak ditemukan atau "
+                    "tidak cocok dengan konteks retrieval). Periksa provider."
+                )
+            else:
+                st.warning(
+                    "Layanan AI belum mengembalikan jawaban dengan format yang "
+                    "valid. Silakan coba lagi nanti atau hubungi administrator.",
+                    icon="⚠️",
+                )
+            response = (
+                "Maaf, layanan AI belum dapat menyusun jawaban yang dapat "
+                "diverifikasi. Silakan coba lagi nanti."
             )
 
-        render_retrieval_debug(debug)
+        cited_pages = set(extract_cited_pages(response))
+        source_refs = build_source_references(
+            outcome.contexts,
+            cited_pages=cited_pages,
+        )
+        display_response = strip_inline_source_lines(response)
+        st.markdown(display_response)
+
+        sources_text = format_sources(
+            outcome.contexts,
+            cited_pages=cited_pages,
+            include_scores=operator_mode,
+        )
+        if source_refs:
+            render_source_references(
+                source_refs,
+                key_prefix=f"current_{len(st.session_state.messages)}",
+                public=not operator_mode,
+            )
+
+        if operator_mode:
+            render_retrieval_debug(debug)
 
         st.session_state.messages.append({
             "role": "assistant",
-            "content": response,
+            "content": display_response,
             "sources": sources_text,
+            "source_refs": source_refs,
+            "message_id": len(st.session_state.messages),
             "debug": debug,
         })
 
@@ -599,8 +717,8 @@ def render_about(retriever: DocumentRetriever | None) -> None:
     rows = [
         ("Institusi", "Universitas Atma Jaya Yogyakarta (UAJY)"),
         ("Dokumen Sumber", label_dokumen),
-        ("Model LLM Generation", f"Google {effective_model(LLM_MODEL)} (via API)"),
-        ("Model Rerank & Rewrite", f"Google {effective_model(UTILITY_MODEL)} (via API)"),
+        ("Model LLM Generation", f"Bandel AI · {effective_model(LLM_MODEL)} (via API)"),
+        ("Model Rerank & Rewrite", f"Bandel AI · {effective_model(UTILITY_MODEL)} (via API)"),
         ("Model Embedding", embedding_label),
         ("Task Type Embedding", embedding_info.get("task_type") or "generik (index lama)"),
         ("Vector Store", "FAISS IndexFlatIP (cosine similarity)"),
@@ -640,7 +758,7 @@ def render_about(retriever: DocumentRetriever | None) -> None:
 # Main Entry Point & Sidebar
 # ──────────────────────────────────────────────
 
-def main() -> None:
+def _operator_main_legacy() -> None:
     render_hero()
 
     retriever, error = load_retriever()
@@ -756,15 +874,68 @@ def main() -> None:
             f"Rerank/rewrite: {effective_model(UTILITY_MODEL)}"
         )
 
-    # Render Active Page
     if page == "Tanya Jawab":
-        render_chat_view(retriever, config)
+        render_chat_view(retriever, config, operator_mode=True)
     elif page == "Jelajah Dokumen":
         render_document_explorer(retriever)
     elif page == "Uji Pertanyaan":
         render_evaluation(retriever)
     else:
         render_about(retriever)
+
+    st.divider()
+    render_footer(
+        "Chatbot Akademik · Fakultas Teknologi Industri "
+        "Universitas Atma Jaya Yogyakarta"
+    )
+
+
+# Entry point publik didefinisikan di bawah fungsi operator legacy. Mode public
+# adalah default agar deploy VPS aman walaupun APP_MODE lupa dikonfigurasi.
+
+
+
+def main() -> None:
+    """Jalankan aplikasi dalam mode public atau operator."""
+    operator_mode = is_operator_mode()
+
+    if operator_mode:
+        # Panel lama lengkap untuk admin/pengembang. Mode ini hanya dibuka
+        # dengan APP_MODE=operator di server internal.
+        _operator_main_legacy()
+        return
+
+    render_hero()
+    retriever, error = load_retriever()
+
+    # Public mode: mahasiswa hanya melihat layanan Tanya Jawab. Tidak ada
+    # slider, toggle pipeline, explorer, evaluasi, jumlah chunk, skor internal,
+    # atau nama model provider.
+    limiter = SessionRateLimiter(
+        limit=public_rate_limit(),
+        window_seconds=public_rate_window_seconds(),
+    )
+    config = DEFAULT_RETRIEVAL_CONFIG
+
+    with st.sidebar:
+        render_brand("Chatbot Akademik", "Layanan Informasi FTI UAJY")
+        nav_label("Layanan Mahasiswa")
+        st.caption(
+            "Tanyakan informasi akademik berdasarkan dokumen resmi Fakultas "
+            "Teknologi Industri UAJY."
+        )
+        st.divider()
+        if st.button("🗑️ Bersihkan Percakapan", use_container_width=True):
+            st.session_state.messages = []
+            st.rerun()
+        st.caption("Gunakan informasi ini sebagai panduan. Untuk keputusan resmi, hubungi bagian akademik.")
+
+    render_chat_view(
+        retriever,
+        config,
+        operator_mode=False,
+        rate_limiter=limiter,
+    )
 
     st.divider()
     render_footer(

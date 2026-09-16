@@ -795,40 +795,91 @@ DocumentRetriever = HybridRetriever
 # Formatting sumber
 # ──────────────────────────────────────────────
 
-def format_sources(results: list[RetrievalCandidate]) -> str:
+def _format_page_ranges(pages: set[int]) -> str:
+    """Format halaman terurut sebagai rentang ringkas."""
+    ordered = sorted(pages)
+    if not ordered:
+        return "-"
+
+    ranges: list[str] = []
+    start = previous = ordered[0]
+    for page in ordered[1:]:
+        if page == previous + 1:
+            previous = page
+            continue
+        ranges.append(str(start) if start == previous else f"{start}–{previous}")
+        start = previous = page
+    ranges.append(str(start) if start == previous else f"{start}–{previous}")
+    return ", ".join(ranges)
+
+
+def build_source_references(
+    results: list[RetrievalCandidate],
+    cited_pages: set[int] | None = None,
+) -> list[dict]:
     """
-    Susun daftar sumber rujukan yang rapi untuk ditampilkan ke pengguna.
+    Buat data sumber terstruktur untuk kartu UI dan PDF viewer.
 
-    Args:
-        results: Kandidat yang benar-benar dipakai sebagai konteks.
-
-    Returns:
-        String multi-baris, satu baris per sumber unik.
+    Setiap item aman disimpan di `st.session_state` karena hanya berisi string,
+    angka, dan list — tidak membawa object FAISS atau dataclass retrieval.
     """
     if not results:
+        return []
+
+    selected = results
+    if cited_pages:
+        selected = [
+            result for result in results
+            if set(result.page_numbers) & cited_pages
+        ]
+    if not selected:
+        return []
+
+    grouped: dict[str, dict] = {}
+    for result in selected:
+        document = result.source_document or ""
+        entry = grouped.setdefault(document, {"pages": set(), "best": result})
+        pages = set(result.page_numbers)
+        if cited_pages:
+            pages &= cited_pages
+        entry["pages"].update(pages)
+        if result.display_score > entry["best"].display_score:
+            entry["best"] = result
+
+    references: list[dict] = []
+    for document, entry in grouped.items():
+        best = entry["best"]
+        references.append({
+            "source_document": document,
+            "document_label": best.document_label,
+            "pages": sorted(entry["pages"]),
+            "page_label": _format_page_ranges(entry["pages"]),
+            "section_title": best.heading_label,
+            "score": round(best.display_score, 4),
+        })
+    return references
+
+
+def format_sources(
+    results: list[RetrievalCandidate],
+    cited_pages: set[int] | None = None,
+    include_scores: bool = True,
+) -> str:
+    """Susun sumber terstruktur menjadi teks kartu yang ringkas."""
+    references = build_source_references(results, cited_pages=cited_pages)
+    if not references:
         return ""
 
-    # Nama dokumen hanya ditampilkan bila konteksnya memang berasal dari
-    # lebih dari satu dokumen. Pada index dokumen tunggal, menyebutkannya
-    # setiap kali hanya menambah keriuhan.
-    banyak_dokumen = len({r.source_document for r in results if r.source_document}) > 1
-
+    many_documents = len(references) > 1
     lines: list[str] = []
-    seen: set[tuple[str, str, str]] = set()
-
-    for result in results:
-        key = (result.source_document, result.page_label, result.heading_label)
-        if key in seen:
-            continue
-        seen.add(key)
-
+    for reference in references:
         source = "📄 "
-        if banyak_dokumen and result.document_label:
-            source += f"{result.document_label} · "
-        source += f"Halaman {result.page_label}"
-        if result.heading_label:
-            source += f" — *{result.heading_label}*"
-        source += f" (relevansi: {result.display_score:.0%})"
+        if many_documents and reference["document_label"]:
+            source += f"{reference['document_label']} · "
+        source += f"Halaman {reference['page_label']}"
+        if reference["section_title"]:
+            source += f" — *{reference['section_title']}*"
+        if include_scores:
+            source += f" (relevansi: {reference['score']:.0%})"
         lines.append(source)
-
     return "\n".join(lines)

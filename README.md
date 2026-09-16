@@ -2,12 +2,12 @@
 
 # UAJY Academic Document RAG Chatbot
 
-**Accurate, Hallucination-Free Academic Question Answering with Streamlit, FAISS, and Google Gemini**
+**Accurate, Grounded Academic Question Answering with Streamlit, FAISS, BM25, and an OpenAI-Compatible LLM Gateway**
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit 1.49](https://img.shields.io/badge/Streamlit-1.49-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://streamlit.io/)
-[![Google Gemini](https://img.shields.io/badge/LLM-Gemini%203.6%20Flash-4285F4?style=flat-square&logo=google&logoColor=white)](https://aistudio.google.com/)
-[![Gemini Embedding](https://img.shields.io/badge/Embedding-gemini--embedding--001-blue?style=flat-square)](https://ai.google.dev/)
+[![Bandel AI Gateway](https://img.shields.io/badge/LLM-OpenAI--Compatible%20Gateway-4285F4?style=flat-square)](https://bandelbanget.xyz/v1)
+[![Gemini Embedding](https://img.shields.io/badge/Embedding-Gemini%20(temporary)-blue?style=flat-square)](https://ai.google.dev/)
 [![Hybrid Retrieval](https://img.shields.io/badge/Retrieval-Hybrid%20BM25%20%2B%20Dense%20(RRF)-8E44AD?style=flat-square)](#-hybrid-retrieval-pipeline)
 [![FAISS](https://img.shields.io/badge/Vector%20Store-FAISS%20CPU-26A69A?style=flat-square)](https://github.com/facebookresearch/faiss)
 [![Tests](https://img.shields.io/badge/tests-404%20passing-2ea44f?style=flat-square)](#-testing)
@@ -27,7 +27,7 @@
 
 **UAJY Academic Document RAG Chatbot** is a production-grade **Retrieval-Augmented Generation (RAG)** assistant engineered to provide verified, hallucination-free answers to students and faculty members based on the official academic handbook (*Buku Pedoman Akademik Fakultas Teknologi Industri Universitas Atma Jaya Yogyakarta 2025/2026*).
 
-Unlike generic language models that are prone to hallucinating administrative deadlines or degree requirements, this system separates **knowledge retrieval** (lightweight local FAISS similarity search) from **response generation** (Google Gemini via API), enforcing strict ground-truth citation and explicit refusal for out-of-scope inquiries.
+Unlike generic language models that are prone to hallucinating administrative deadlines or degree requirements, this system separates **knowledge retrieval** (local FAISS + BM25) from **response generation** (an OpenAI-compatible LLM gateway), enforcing strict ground-truth citation and explicit refusal for out-of-scope inquiries. In the current short-term deployment, the gateway handles chat/rerank/rewrite while Gemini is used only for embeddings.
 
 ---
 
@@ -44,8 +44,8 @@ Unlike generic language models that are prone to hallucinating administrative de
 - 🕒 **Stale Index Detection:** Each document's SHA-256 *and* an ingestion pipeline version are recorded at build time, then re-checked on startup. A source PDF that changed, or chunking logic that improved, both surface as a warning instead of quietly answering from a stale index.
 - 🔍 **Interactive Document Explorer:** Search, filter, and inspect all 218 indexed chunks with their hierarchical section paths.
 - 📊 **Ablation Study, Not Just a Benchmark:** Compare dense-only vs hybrid vs hybrid+rerank on page-level relevance, MRR, refusal accuracy, and false-refusal rate.
-- 🧪 **404 tests, No API Key Required:** Every pure-logic module is covered, including regression guards for six real bugs found by measurement. CI runs on every push.
-- 🌙 **Editorial Dark Theme UI:** Modern, clean, high-contrast dark interface built with Streamlit and tailored CSS design tokens.
+- 🧪 **429 tests, No API Key Required:** Every pure-logic module is covered, including regression guards for nine real bugs found by measurement. CI runs on every push.
+- 🌤️ **SIATMA-Inspired Light UI:** Light blue page background, white cards, cyan section headers, and a public student mode built with Streamlit.
 
 ---
 
@@ -63,7 +63,7 @@ Unlike generic language models that are prone to hallucinating administrative de
                   │  • PDF text extraction (pdfplumber) │
                   │  • Noise filtering (24% of lines)   │
                   │  • Page-accurate chunking + heading │
-                  │  • Gemini Embedding (Dim: 3072)     │
+                  │  • Gemini Embedding (temporary)   │
                   └──────────────────┬──────────────────┘
                                      │
                                      ▼
@@ -108,7 +108,7 @@ Unlike generic language models that are prone to hallucinating administrative de
                                      ▼
                          ┌───────────────────────┐
                          │ Prompt Builder        │
-                         │ + Gemini 3.6 Flash    │
+                         │ + OpenAI-Compatible LLM   │
                          └───────────┬───────────┘
                                      ▼
                          ┌───────────────────────┐
@@ -125,7 +125,9 @@ Unlike generic language models that are prone to hallucinating administrative de
 
 **Why fuse by rank instead of score?** Cosine similarity lives in `0–1` while BM25 is unbounded. Normalising them against each other requires arbitrary scaling. [Reciprocal Rank Fusion](https://dl.acm.org/doi/10.1145/1571941.1572114) sidesteps this entirely by summing `weight / (k + rank)` — only ordering matters.
 
-**Why an LLM reranker instead of a local cross-encoder?** Multilingual cross-encoders weigh hundreds of megabytes and drag in PyTorch, which conflicts with keeping this project CPU-only and deployable on free tiers. One `gemini-3.5-flash-lite` call scores all candidates in ~400 ms.
+**Why an LLM reranker instead of a local cross-encoder?** Multilingual cross-encoders weigh hundreds of megabytes and drag in PyTorch, which conflicts with keeping this project CPU-only and deployable on free tiers. One provider-gateway call scores all candidates.
+
+**Current provider split.** The short-term gateway at `https://bandelbanget.xyz/v1` is used for chat completions, reranking, and query rewriting. The endpoint currently does not expose `/embeddings`, so `gemini-embedding-001` remains the embedding provider until a local embedding model or compatible embedding API is configured. These two keys must be stored separately.
 
 **How the relevance gate actually works.** An honest note, because measurement contradicted the original design: since embeddings are built with `RETRIEVAL_DOCUMENT`/`RETRIEVAL_QUERY` task types, cosine scores compress into a narrow high band and **overlap** between relevant and irrelevant questions:
 
@@ -143,14 +145,14 @@ No single similarity threshold can separate them. The inherited `0.30` threshold
 | Layer | Technology | Purpose |
 |---|---|---|
 | **Frontend UI** | [Streamlit](https://streamlit.io/) 1.32+ | Chat interface, document explorer, retrieval debug panel |
-| **LLM Generation** | [Google Gemini 3.6 Flash](https://ai.google.dev/) | High-speed, context-rich reasoning in Indonesian & English |
-| **Rerank & Rewrite** | [Gemini 3.5 Flash Lite](https://ai.google.dev/) | Listwise reranking and query rewriting (zero thinking tokens) |
-| **Model Resilience** | Configurable fallback chain | Retired models degrade to the next available one instead of erroring |
-| **Embeddings** | [gemini-embedding-001](https://ai.google.dev/) | 3072-dim multilingual vectors, task-type aware |
+| **LLM Generation** | OpenAI-compatible gateway (`https://bandelbanget.xyz/v1`) | Chat completions for grounded answers |
+| **Rerank & Rewrite** | Same OpenAI-compatible gateway | Listwise reranking and query rewriting |
+| **Embeddings (temporary)** | [gemini-embedding-001](https://ai.google.dev/) | 3072-dim multilingual vectors, task-type aware; separate Google key required |
 | **Dense Search** | [FAISS (CPU)](https://github.com/facebookresearch/faiss) | `IndexFlatIP` cosine similarity over normalised vectors |
 | **Lexical Search** | BM25 Okapi (in-house) | Exact-term matching, built in-memory at startup — no extra artifact, no dependency |
 | **Fusion** | Reciprocal Rank Fusion | Rank-based merge of dense + lexical results |
 | **PDF Extraction** | [pdfplumber](https://github.com/jsvine/pdfplumber) | Layout-aware text extraction from PDF |
+| **PDF Viewer** | [PyMuPDF](https://pymupdf.readthedocs.io/) | Render the cited page as a visible PNG preview in Streamlit |
 | **Language** | Python 3.11+ | Core application runtime (`tomllib` for secrets parsing) |
 
 ---
@@ -160,8 +162,9 @@ No single similarity threshold can separate them. The inherited `0.30` threshold
 ```
 ChatBot RAG kampus/
 ├── .streamlit/
-│   ├── config.toml           # Streamlit dark theme configuration
-│   └── secrets.toml          # Secret API keys (excluded from git)
+│   ├── config.toml           # Light campus-style theme configuration
+│   ├── secrets.example.toml  # Provider configuration template
+│   └── secrets.toml          # Local secret keys (excluded from git)
 ├── .github/workflows/
 │   └── tests.yml             # CI: pytest on Python 3.11 & 3.12, no API key needed
 ├── app/
@@ -171,7 +174,10 @@ ChatBot RAG kampus/
 │   ├── text_utils.py         # Indonesian tokenizer, stopwords, domain aliases
 │   ├── lexical_index.py      # BM25 Okapi + IDF-weighted lexical coverage
 │   ├── index_status.py       # Stale-index detection via document hashes
-│   ├── llm_client.py         # Gemini wrapper (Streamlit-independent) + embed cache
+│   ├── llm_client.py         # OpenAI-compatible chat + Gemini embedding adapter
+│   ├── public_config.py       # Public/operator mode and runtime settings
+│   ├── rate_limit.py          # Per-session public rate limiter
+│   ├── answer_guard.py        # Blocks provider responses without citations
 │   ├── query_rewriter.py     # History-aware follow-up rewriting
 │   ├── reranker.py           # Listwise LLM reranker
 │   ├── retrieval.py          # Hybrid retrieval, RRF fusion, relevance gate
@@ -189,10 +195,11 @@ ChatBot RAG kampus/
 │   ├── answer_eval.py        # Groundedness, citation, and refusal checks
 │   ├── run_answer_eval.py    # Answer-level evaluation runner
 │   └── eval_results.json     # Generated metrics + per-question detail
-├── tests/                    # 404 tests, no API key required
+├── tests/                    # 429 tests, no API key required
 │   ├── conftest.py
-│   ├── test_regressions.py   # Guards for six real bugs
-│   └── test_*.py             # Per-module unit tests
+│   ├── test_openai_provider.py # OpenAI-compatible adapter tests
+│   ├── test_public_mode.py     # Public mode + rate limit tests
+│   └── test_*.py               # Per-module unit tests
 ├── index/
 │   ├── README.md
 │   ├── faiss.index           # Persisted FAISS index (218 vectors, 3072-dim)
@@ -222,14 +229,27 @@ cd uajy-academic-rag-chatbot
 pip install -r requirements.txt
 ```
 
-### 2. Configure Gemini API Key
+### 2. Configure Providers
 
-Obtain a free API key from [Google AI Studio](https://aistudio.google.com/), then create `.streamlit/secrets.toml`:
+Chat, reranker, dan query rewriting memakai endpoint OpenAI-compatible Bandel AI. Embedding tetap memakai Google Gemini karena endpoint Bandel yang tersedia belum menyediakan `/embeddings`:
 
 ```toml
 # .streamlit/secrets.toml
-GEMINI_API_KEY = "your_actual_gemini_api_key_here"
+LLM_API_KEY = "your_bandel_api_key_here"
+LLM_BASE_URL = "https://bandelbanget.xyz/v1"
+LLM_MODEL = "auto"
+UTILITY_MODEL = "auto"
+
+# Key Google AI Studio, BERBEDA dari LLM_API_KEY
+GEMINI_EMBEDDING_API_KEY = "your_google_embedding_key_here"
+
+# public untuk mahasiswa; operator untuk UI internal
+APP_MODE = "public"
+PUBLIC_RATE_LIMIT = 20
+PUBLIC_RATE_WINDOW_SECONDS = 3600
 ```
+
+`GEMINI_API_KEY` lama masih dibaca sebagai fallback transisi untuk chat/embedding, tetapi konfigurasi yang direkomendasikan memakai nama terpisah agar key Bandel tidak tertukar dengan key Google. **Jangan jalankan public mode sebelum kedua key tersedia:** `LLM_API_KEY` untuk Bandel dan `GEMINI_EMBEDDING_API_KEY` untuk Google.
 
 ### 3. Build the Vector Index (One-Time Execution)
 
@@ -330,6 +350,24 @@ The deepest heading is also the more useful one — `H. Cuti Studi` rather than 
 
 ---
 
+## 👩‍🎓 Public Mode untuk Mahasiswa
+
+Mode aplikasi default adalah `public`. Mahasiswa hanya melihat halaman Tanya Jawab, contoh pertanyaan, sumber halaman, dan tombol membersihkan percakapan. Kontrol internal — explorer, evaluasi, toggle hybrid/reranker/rewrite, slider retrieval, skor debug, jumlah chunk, dan nama model — disembunyikan.
+
+Untuk membuka panel internal pada mesin operator, isi:
+
+```toml
+APP_MODE = "operator"
+```
+
+Public mode juga memiliki rate limit per sesi. Nilai defaultnya 20 pertanyaan per window satu jam; atur melalui `PUBLIC_RATE_LIMIT` dan `PUBLIC_RATE_WINDOW_SECONDS`. Ini limiter sederhana di proses Streamlit, bukan pengganti Redis/Nginx untuk deployment berskala besar.
+
+### Circuit breaker provider
+
+Jawaban publik wajib memuat sitasi halaman. Bila gateway mengabaikan prompt dan mengembalikan teks acak atau pesan error, aplikasi tidak menampilkannya sebagai jawaban akademik. Mahasiswa menerima pesan layanan yang aman, sementara operator dapat memeriksa masalah provider.
+
+---
+
 ## 🔬 Answer-Level Evaluation
 
 Retrieval metrics stop halfway. The two largest claims of this project live on the generation side, so they get their own suite:
@@ -390,9 +428,9 @@ pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-404 tests, ~1.5 seconds, **no API key and no index required** — every test is self-contained, so CI runs safely on forks and pull requests.
+429 tests, ~1.5 seconds, **no API key and no index required** — every test is self-contained, so CI runs safely on forks and pull requests.
 
-Coverage is concentrated where bugs actually appeared. Six regression guards protect real failures found by measurement, not imagined ones:
+Coverage is concentrated where bugs actually appeared. Nine regression guards protect real failures found by measurement, not imagined ones:
 
 | Bug | Symptom | Guard |
 |---|---|---|
@@ -417,10 +455,13 @@ The rerank one deserves emphasis. Its fail-safe returned candidates with `rerank
 ### Mengapa Menggunakan RAG?
 - **Bebas Halusinasi:** Model LLM diinstruksikan menjawab **hanya** berdasarkan teks yang ditemukan di dalam dokumen PDF resmi.
 - **Kutipan Transparan:** Setiap jawaban menyertakan rujukan nomor halaman dan judul bab/pasal.
-- **Ringan & Hemat Resource:** Vector store dijalankan secara lokal via FAISS (CPU), sedangkan inferensi dilakukan via API Google Gemini.
+- **Ringan & Hemat Resource:** Vector store dijalankan secara lokal via FAISS (CPU), embedding memakai Gemini sementara, sedangkan jawaban/reranker/query rewriting memakai gateway LLM OpenAI-compatible.
 
-### Pencarian Hibrida
-Pencarian dilakukan lewat dua jalur sekaligus. Jalur *dense* memakai embedding untuk menangkap kesamaan makna, sedangkan **BM25** menangkap istilah eksak yang justru paling sering ditanyakan mahasiswa: `IPK 3,51`, `144 SKS`, `Pasal 12`. Hasil keduanya digabung dengan *Reciprocal Rank Fusion*, lalu **reranker** menilai ulang kandidat berdasarkan kemampuannya benar-benar menjawab pertanyaan — bukan sekadar mirip kata.
+### Kesiapan Provider Jangka Pendek
+
+Gateway `https://bandelbanget.xyz/v1` sudah dapat dipanggil melalui `chat/completions`, tetapi pada pengujian saat ini responsnya tidak mengikuti prompt dan format JSON yang diminta — beberapa prompt berbeda menghasilkan kalimat motivasi yang sama. Karena itu gateway **belum aman untuk dipakai mahasiswa** sampai provider memperbaiki kompatibilitasnya atau memberikan base URL/model yang benar. Circuit breaker di public mode mencegah respons tanpa sitasi tampil sebagai jawaban.
+
+
 
 Pertanyaan lanjutan seperti *"berapa maksimalnya?"* ditulis ulang lebih dulu menjadi pertanyaan mandiri sebelum pencarian berjalan, sebab tanpa itu konteks yang salah sudah terambil sejak awal.
 

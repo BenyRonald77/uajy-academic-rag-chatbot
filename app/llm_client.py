@@ -1,22 +1,34 @@
 """
-llm_client.py — Wrapper untuk Google Gemini API (LLM generation + embedding).
+llm_client.py — Adapter provider untuk pipeline RAG.
 
-Modul ini sengaja TIDAK bergantung pada Streamlit sehingga bisa dipakai ulang
-oleh script ingestion, runner evaluasi, dan (nanti) API/bot lain. UI Streamlit
-menangkap `LLMConfigError` dan menampilkan pesannya sendiri.
+Pembagian provider jangka pendek:
 
-Desain API-agnostic: cukup ganti isi fungsi di bawah jika ingin pindah
-provider (OpenAI, Groq, dll).
+- **OpenAI-compatible endpoint** (`LLM_BASE_URL`) untuk jawaban, reranker,
+  dan query rewriting. Default-nya `https://bandelbanget.xyz/v1`.
+- **Google Gemini** hanya untuk embedding, karena endpoint OpenAI-compatible
+  baru yang dipakai belum menyediakan `/embeddings`.
+
+API internal tetap sama agar modul lain tidak berubah:
+
+- `call_llm()`
+- `call_utility_llm()`
+- `embed_texts()`
+- `get_query_embedding()`
+
+Dengan begitu perpindahan provider tidak merusak retrieval, evaluasi, atau UI.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from functools import lru_cache
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from google import genai
-from google.genai import types as genai_types
 
 from app.config import (
     ANSWER_MAX_TOKENS,
@@ -25,9 +37,12 @@ from app.config import (
     EMBED_BATCH_SIZE,
     EMBED_MAX_RETRIES,
     EMBEDDING_MODEL,
+    LLM_BASE_URL,
     LLM_MODEL,
     MODEL_FALLBACKS,
     PROJECT_ROOT,
+    TASK_TYPE_DOCUMENT,
+    TASK_TYPE_QUERY,
     UTILITY_MODEL,
     UTILITY_TEMPERATURE,
 )
@@ -36,242 +51,313 @@ _PLACEHOLDER_KEYS = {
     "",
     "MASUKKAN_API_KEY_GEMINI_ANDA_DI_SINI",
     "your_actual_gemini_api_key_here",
+    "your_bandel_api_key_here",
+    "your_api_key_here",
 }
 
-#: Task type embedding. Memberi tahu model apakah teks berperan sebagai
-#: dokumen yang diindeks atau sebagai query pencarian — meningkatkan kualitas
-#: retrieval dibanding embedding generik.
-TASK_TYPE_DOCUMENT = "RETRIEVAL_DOCUMENT"
-TASK_TYPE_QUERY = "RETRIEVAL_QUERY"
+# Provider OpenAI-compatible mengembalikan error model/kuota per model.
+# Karena itu model cadangan boleh dicoba untuk 404, 429, dan 503.
+_MODEL_UNAVAILABLE_MARKERS = (
+    "404", "NOT_FOUND",
+    "429", "RESOURCE_EXHAUSTED", "RATE_LIMIT",
+    "500", "502", "503", "504", "UNAVAILABLE",
+)
+
+# Ingatan proses: setelah `auto` terbukti bekerja, request berikutnya tidak
+# perlu menguji model mati yang sama terlebih dahulu.
+_WORKING_MODEL: dict[str, str] = {}
+
+# Cache query embedding tetap memakai key task type agar embedding dokumen dan
+# query tidak pernah tertukar.
+_QUERY_EMBEDDING_CACHE: dict[tuple[str, str | None], list[float]] = {}
+_QUERY_EMBEDDING_CACHE_LIMIT = 512
+
+# Endpoint baru bisa membutuhkan waktu lebih lama saat gateway memilih model.
+HTTP_TIMEOUT_SECONDS = 120
+
+# Alias kompatibilitas: modul lama mengimpor konstanta ini dari llm_client.
+# Sumber aslinya sekarang app.config.
 
 
 class LLMConfigError(RuntimeError):
-    """API key belum diatur atau tidak valid."""
+    """Provider/key belum dikonfigurasi."""
 
 
 class LLMCallError(RuntimeError):
-    """Panggilan ke Gemini API gagal setelah semua percobaan."""
+    """Panggilan provider gagal setelah semua percobaan."""
 
 
 # ──────────────────────────────────────────────
-# API Key & Client
+# Secrets & provider config
 # ──────────────────────────────────────────────
 
-def resolve_api_key(explicit_key: str | None = None) -> str:
+def _valid_key(value: Any) -> bool:
+    return bool(value and str(value).strip() not in _PLACEHOLDER_KEYS)
+
+
+def _looks_like_gateway_key(value: str | None) -> bool:
     """
-    Cari API key Gemini dari beberapa sumber, berurutan:
+    Heuristik untuk mencegah key Bandel dipakai ke Gemini embedding.
 
-    1. Argumen eksplisit (mis. flag ``--api-key``).
-    2. Environment variable ``GEMINI_API_KEY`` / ``GOOGLE_API_KEY``.
-    3. File ``.streamlit/secrets.toml``.
-    4. ``st.secrets`` (hanya jika Streamlit sedang berjalan).
-
-    Raises:
-        LLMConfigError: jika tidak ada key valid yang ditemukan.
+    Key gateway yang terlihat pada konfigurasi user berbentuk `sk-…`,
+    sedangkan key Google AI Studio umumnya berbentuk `AIza…`. Ini bukan
+    validasi autentikasi — hanya pencegah salah provider sebelum request.
     """
-    candidates: list[str | None] = [explicit_key]
-
-    for env_name in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
-        candidates.append(os.environ.get(env_name))
-
-    candidates.append(_read_key_from_secrets_file())
-    candidates.append(_read_key_from_streamlit())
-
-    for candidate in candidates:
-        if candidate and candidate.strip() not in _PLACEHOLDER_KEYS:
-            return candidate.strip()
-
-    raise LLMConfigError(
-        "API key Gemini belum diatur. Pilih salah satu cara:\n"
-        "  1. Set environment variable GEMINI_API_KEY\n"
-        "  2. Isi GEMINI_API_KEY di .streamlit/secrets.toml\n"
-        "  3. Jalankan script dengan flag --api-key YOUR_KEY"
-    )
+    return bool(value and str(value).strip().lower().startswith(("sk-", "sk_")))
 
 
-def _read_key_from_secrets_file() -> str | None:
-    """Baca API key langsung dari .streamlit/secrets.toml tanpa Streamlit."""
+def _read_secrets_file(*names: str) -> str | None:
+    """Baca key generik dari secrets.toml tanpa mencetak nilainya."""
     secrets_path = PROJECT_ROOT / ".streamlit" / "secrets.toml"
     if not secrets_path.exists():
         return None
 
     try:
         import tomllib
-    except ModuleNotFoundError:  # Python < 3.11
-        return None
-
-    try:
         with open(secrets_path, "rb") as f:
-            return tomllib.load(f).get("GEMINI_API_KEY")
-    except Exception:
+            data = tomllib.load(f)
+    except (OSError, ValueError, ModuleNotFoundError):
         return None
 
+    for name in names:
+        value = data.get(name)
+        if _valid_key(value):
+            return str(value).strip()
+    return None
 
-def _read_key_from_streamlit() -> str | None:
-    """Ambil dari st.secrets bila modul Streamlit tersedia dan punya key-nya."""
+
+def _read_streamlit_secret(*names: str) -> str | None:
+    """Baca secret dari Streamlit bila aplikasi sedang berjalan."""
     try:
         import streamlit as st
-
-        return st.secrets.get("GEMINI_API_KEY")
+        for name in names:
+            value = st.secrets.get(name)
+            if _valid_key(value):
+                return str(value).strip()
     except Exception:
-        return None
+        pass
+    return None
+
+
+def resolve_llm_api_key(explicit_key: str | None = None) -> str:
+    """
+    Cari key untuk endpoint OpenAI-compatible.
+
+    Prioritas:
+
+    1. argumen eksplisit
+    2. `LLM_API_KEY`, `BANDEL_API_KEY`, `OPENAI_API_KEY`
+    3. key dengan nama sama di secrets.toml
+    4. `GEMINI_API_KEY` lama sebagai fallback transisi
+
+    Fallback terakhir membantu instalasi lama tetap hidup, tetapi konfigurasi
+    yang dianjurkan adalah `LLM_API_KEY` agar jelas key itu bukan key Google.
+    """
+    candidates: list[str | None] = [explicit_key]
+    for env_name in ("LLM_API_KEY", "BANDEL_API_KEY", "OPENAI_API_KEY"):
+        candidates.append(os.environ.get(env_name))
+    candidates.append(_read_secrets_file("LLM_API_KEY", "BANDEL_API_KEY", "OPENAI_API_KEY"))
+    candidates.append(_read_streamlit_secret("LLM_API_KEY", "BANDEL_API_KEY", "OPENAI_API_KEY"))
+
+    # Transisi: sebelumnya project hanya punya GEMINI_API_KEY. Ini boleh
+    # dipakai untuk chat bila base URL-nya sudah diarahkan ke provider baru.
+    candidates.append(os.environ.get("GEMINI_API_KEY"))
+    candidates.append(_read_secrets_file("GEMINI_API_KEY"))
+    candidates.append(_read_streamlit_secret("GEMINI_API_KEY"))
+
+    for candidate in candidates:
+        if _valid_key(candidate):
+            return str(candidate).strip()
+
+    raise LLMConfigError(
+        "API key provider chat belum diatur. Isi salah satu:\n"
+        "  1. LLM_API_KEY di .streamlit/secrets.toml\n"
+        "  2. environment variable LLM_API_KEY\n"
+        "  3. flag --api-key YOUR_KEY"
+    )
+
+
+def resolve_api_key(explicit_key: str | None = None) -> str:
+    """
+    Alias kompatibilitas untuk kode lama.
+
+    Sebelumnya semua provider memakai nama `resolve_api_key`. Sekarang chat
+    dan embedding dipisah, tetapi pemanggil lama tetap diarahkan ke resolver
+    key chat agar tidak pecah saat migrasi.
+    """
+    return resolve_llm_api_key(explicit_key)
+
+
+def resolve_embedding_api_key(explicit_key: str | None = None) -> str:
+    """
+    Cari key Google untuk embedding.
+
+    Konfigurasi yang dianjurkan:
+
+        GEMINI_EMBEDDING_API_KEY = "key_google"
+
+    `GEMINI_API_KEY` tetap diterima sebagai kompatibilitas instalasi lama,
+    tetapi key Bandel tidak boleh ditempatkan di sana bila embedding Gemini
+    masih digunakan.
+    """
+    candidates: list[str | None] = [explicit_key]
+    for env_name in (
+        "GEMINI_EMBEDDING_API_KEY",
+        "GOOGLE_API_KEY",
+        "EMBEDDING_API_KEY",
+    ):
+        candidates.append(os.environ.get(env_name))
+
+    candidates.append(_read_secrets_file(
+        "GEMINI_EMBEDDING_API_KEY",
+        "GOOGLE_API_KEY",
+        "EMBEDDING_API_KEY",
+    ))
+    candidates.append(_read_streamlit_secret(
+        "GEMINI_EMBEDDING_API_KEY",
+        "GOOGLE_API_KEY",
+        "EMBEDDING_API_KEY",
+    ))
+
+    # Kompatibilitas dengan instalasi lama yang menyimpan key Google di
+    # GEMINI_API_KEY. Key gateway `sk-…` sengaja dilewati agar error-nya tidak
+    # baru muncul sebagai 401 jauh di dalam request embedding.
+    legacy_candidates = [
+        os.environ.get("GEMINI_API_KEY"),
+        _read_secrets_file("GEMINI_API_KEY"),
+        _read_streamlit_secret("GEMINI_API_KEY"),
+    ]
+    candidates.extend(
+        value for value in legacy_candidates
+        if not _looks_like_gateway_key(value)
+    )
+
+    for candidate in candidates:
+        if _valid_key(candidate):
+            return str(candidate).strip()
+
+    raise LLMConfigError(
+        "API key Gemini embedding belum diatur. Isi "
+        "GEMINI_EMBEDDING_API_KEY dengan key Google AI Studio. "
+        "Key Bandel tidak bisa dipakai untuk embedding Gemini."
+    )
+
+
+def resolve_llm_base_url(explicit_url: str | None = None) -> str:
+    """Cari base URL OpenAI-compatible dari argumen, env, secrets, default."""
+    candidates: list[str | None] = [explicit_url]
+    candidates.extend([
+        os.environ.get("LLM_BASE_URL"),
+        os.environ.get("OPENAI_BASE_URL"),
+        _read_secrets_file("LLM_BASE_URL", "OPENAI_BASE_URL"),
+        _read_streamlit_secret("LLM_BASE_URL", "OPENAI_BASE_URL"),
+        LLM_BASE_URL,
+    ])
+
+    for candidate in candidates:
+        if candidate and str(candidate).strip():
+            return str(candidate).strip().rstrip("/")
+
+    raise LLMConfigError("Base URL provider chat belum diatur.")
 
 
 @lru_cache(maxsize=4)
 def get_client(api_key: str | None = None) -> genai.Client:
-    """Client Gemini yang di-cache per API key."""
-    return genai.Client(api_key=resolve_api_key(api_key))
+    """Gemini client yang di-cache khusus untuk embedding."""
+    return genai.Client(api_key=resolve_embedding_api_key(api_key))
 
 
 # ──────────────────────────────────────────────
-# Generation
+# OpenAI-compatible chat
 # ──────────────────────────────────────────────
-
-def call_llm(
-    prompt: str,
-    system_instruction: str = "",
-    temperature: float = ANSWER_TEMPERATURE,
-    max_tokens: int = ANSWER_MAX_TOKENS,
-    model: str = LLM_MODEL,
-    api_key: str | None = None,
-    raise_on_error: bool = False,
-) -> str:
-    """
-    Panggil Gemini untuk menghasilkan jawaban akhir.
-
-    Args:
-        raise_on_error: Bila ``True``, kegagalan dilempar sebagai exception
-            alih-alih dikembalikan sebagai pesan. UI memerlukan pesan yang
-            ramah untuk ditampilkan di chat, tetapi runner evaluasi
-            memerlukan kegagalan yang bisa dibedakan: pesan error yang
-            diperlakukan sebagai jawaban akan merusak metriknya — penilai
-            groundedness bahkan memberi nilai sempurna pada pesan error,
-            sebab pesan itu memang tidak memuat klaim faktual apa pun.
-    """
-    if raise_on_error:
-        return _generate(
-            prompt=prompt,
-            system_instruction=system_instruction,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            model=model,
-            api_key=api_key,
-        )
-
-    try:
-        text = _generate(
-            prompt=prompt,
-            system_instruction=system_instruction,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            model=model,
-            api_key=api_key,
-        )
-        return text or "Maaf, saya tidak dapat menghasilkan jawaban untuk pertanyaan ini."
-    except LLMConfigError as e:
-        return f"⚠️ {e}"
-    except Exception as e:
-        error_msg = str(e)
-        lowered = error_msg.lower()
-        if "quota" in lowered or "rate" in lowered or "429" in error_msg:
-            return "⚠️ Batas penggunaan API tercapai. Silakan coba lagi dalam beberapa menit."
-        if "api_key" in lowered or "api key" in lowered or "authentication" in lowered:
-            return "⚠️ API key tidak valid. Periksa konfigurasi di `.streamlit/secrets.toml`."
-        return f"⚠️ Terjadi kesalahan saat memproses: {error_msg}"
-
-
-def call_utility_llm(
-    prompt: str,
-    system_instruction: str = "",
-    max_tokens: int = 1024,
-    api_key: str | None = None,
-    json_mode: bool = False,
-) -> str:
-    """
-    Panggil model bantu yang murah & deterministik (rerank, query rewriting).
-
-    Args:
-        json_mode: Minta model mengembalikan JSON valid. Menghilangkan
-            kebutuhan mengurai teks bebas pada output reranker.
-
-    Raises:
-        Exception: dibiarkan naik agar pemanggil bisa fallback dengan aman.
-    """
-    return _generate(
-        prompt=prompt,
-        system_instruction=system_instruction,
-        temperature=UTILITY_TEMPERATURE,
-        max_tokens=max_tokens,
-        model=UTILITY_MODEL,
-        api_key=api_key,
-        response_mime_type="application/json" if json_mode else None,
-    )
-
-
-#: Galat yang menandakan model itu sendiri tidak bisa dipakai, sehingga
-#: berpindah ke model lain masuk akal:
-#:
-#: - **404 / NOT_FOUND** — model sudah dihapus penyedianya.
-#: - **503 / UNAVAILABLE** — model sedang kelebihan beban.
-#: - **429 / RESOURCE_EXHAUSTED** — kuota habis.
-#:
-#: Kuota semula sengaja dikecualikan, dengan alasan batasnya berlaku pada akun
-#: sehingga berpindah model tidak menolong. Pesan galat API membuktikan alasan
-#: itu salah::
-#:
-#:     limit: 20, model: gemini-3.6-flash
-#:     quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier
-#:
-#: Kuotanya **per model**, bukan per akun. Pada tingkat gratis batasnya hanya
-#: 20 permintaan per hari per model, jadi menyebar beban ke model cadangan
-#: benar-benar menambah kapasitas alih-alih memboroskannya.
-_MODEL_UNAVAILABLE_MARKERS = (
-    "404", "NOT_FOUND",
-    "503", "UNAVAILABLE",
-    "429", "RESOURCE_EXHAUSTED",
-)
-
-#: Model yang terbukti bisa dipanggil, dipetakan dari model utama yang diminta.
-#: Tanpa ingatan ini, setiap permintaan akan menabrak model yang sudah mati
-#: lebih dulu dan menambah satu perjalanan jaringan yang pasti gagal.
-_WORKING_MODEL: dict[str, str] = {}
-
 
 def _is_model_unavailable(error: Exception) -> bool:
-    """True bila galat menandakan modelnya yang bermasalah, bukan permintaannya."""
-    message = str(error)
+    message = str(error).upper()
     return any(marker in message for marker in _MODEL_UNAVAILABLE_MARKERS)
 
 
 def model_chain(primary: str) -> list[str]:
-    """
-    Urutan model yang dicoba untuk sebuah model utama.
-
-    Model yang sebelumnya terbukti bekerja diletakkan paling depan, tetapi
-    sisanya tetap dipertahankan sebagai cadangan agar sistem bisa pulih bila
-    model itu pun kemudian ikut dihapus.
-    """
+    """Urutan model utama dan cadangannya."""
     configured = [primary, *MODEL_FALLBACKS.get(primary, ())]
-
     working = _WORKING_MODEL.get(primary)
     if working and working in configured:
-        return [working] + [m for m in configured if m != working]
+        return [working] + [model for model in configured if model != working]
     return configured
 
 
 def effective_model(primary: str) -> str:
-    """
-    Model yang sedang benar-benar dipakai untuk `primary`.
-
-    Dipakai UI agar yang ditampilkan adalah kenyataan, bukan konfigurasi yang
-    barangkali sudah digantikan oleh fallback.
-    """
+    """Model yang terakhir terbukti berhasil untuk model konfigurasi tertentu."""
     return _WORKING_MODEL.get(primary, primary)
 
 
 def reset_model_cache() -> None:
-    """Lupakan model yang tercatat bekerja. Terutama berguna untuk pengujian."""
+    """Reset ingatan model aktif, terutama untuk test/operator."""
     _WORKING_MODEL.clear()
+
+
+def _openai_error(status: int | None, body: str) -> LLMCallError:
+    # Body provider boleh panjang dan kadang memuat detail internal. Tetap
+    # simpan kode + cuplikan agar UI tidak dipenuhi dump respons mentah.
+    compact = " ".join(body.split())[:700]
+    return LLMCallError(f"{status or 'HTTP'} {compact}")
+
+
+def _post_json(
+    path: str,
+    payload: dict,
+    api_key: str,
+    base_url: str,
+) -> dict:
+    """POST JSON dengan stdlib, tanpa dependency SDK tambahan."""
+    request = Request(
+        f"{base_url}/{path.lstrip('/')}",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+            body = response.read().decode("utf-8", errors="replace")
+            status = response.status
+    except HTTPError as error:
+        body = error.read().decode("utf-8", errors="replace")
+        raise _openai_error(error.code, body) from error
+    except (URLError, TimeoutError, OSError) as error:
+        raise LLMCallError(f"Provider tidak dapat dihubungi: {error}") from error
+
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError as error:
+        raise _openai_error(status, body) from error
+
+    if not isinstance(data, dict):
+        raise LLMCallError("Provider mengembalikan format JSON yang tidak valid.")
+    if data.get("error"):
+        raise _openai_error(status, json.dumps(data["error"], ensure_ascii=False))
+    return data
+
+
+def _extract_chat_text(data: dict) -> str:
+    choices = data.get("choices") or []
+    if not choices:
+        return ""
+
+    message = choices[0].get("message") or {}
+    content = message.get("content", "")
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        # OpenAI-compatible multimodal format kadang mengembalikan list part.
+        return "".join(
+            str(part.get("text", "")) if isinstance(part, dict) else str(part)
+            for part in content
+        ).strip()
+    return str(content).strip() if content else ""
 
 
 def _generate_once(
@@ -283,15 +369,25 @@ def _generate_once(
     api_key: str | None,
     response_mime_type: str | None,
 ) -> str:
-    client = get_client(api_key)
-    config = genai_types.GenerateContentConfig(
-        system_instruction=system_instruction or None,
-        temperature=temperature,
-        max_output_tokens=max_tokens,
-        response_mime_type=response_mime_type,
-    )
-    response = client.models.generate_content(model=model, contents=prompt, config=config)
-    return (response.text or "").strip()
+    """Satu panggilan chat completions ke endpoint OpenAI-compatible."""
+    key = resolve_llm_api_key(api_key)
+    base_url = resolve_llm_base_url()
+
+    messages = []
+    if system_instruction:
+        messages.append({"role": "system", "content": system_instruction})
+    messages.append({"role": "user", "content": prompt})
+
+    payload: dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    if response_mime_type == "application/json":
+        payload["response_format"] = {"type": "json_object"}
+
+    return _extract_chat_text(_post_json("chat/completions", payload, key, base_url))
 
 
 def _generate(
@@ -303,16 +399,10 @@ def _generate(
     api_key: str | None,
     response_mime_type: str | None = None,
 ) -> str:
-    """
-    Hasilkan teks, berpindah ke model cadangan bila modelnya tidak tersedia.
-
-    Raises:
-        Exception: galat terakhir, bila seluruh model pada rantai gagal.
-    """
-    chain = model_chain(model)
+    """Generate dengan fallback model bila provider mengembalikan error model."""
     last_error: Exception | None = None
 
-    for candidate in chain:
+    for candidate in model_chain(model):
         try:
             text = _generate_once(
                 prompt=prompt,
@@ -323,11 +413,9 @@ def _generate(
                 api_key=api_key,
                 response_mime_type=response_mime_type,
             )
-        except Exception as e:
-            last_error = e
-            # Galat non-model (kuota, autentikasi, permintaan salah) tidak akan
-            # membaik dengan berpindah model, jadi diteruskan apa adanya.
-            if not _is_model_unavailable(e):
+        except Exception as error:
+            last_error = error
+            if not _is_model_unavailable(error):
                 raise
             continue
 
@@ -335,11 +423,87 @@ def _generate(
             _WORKING_MODEL[model] = candidate
         return text
 
-    raise last_error if last_error else LLMCallError("Tidak ada model yang bisa dipanggil.")
+    raise last_error or LLMCallError("Tidak ada model chat yang bisa dipanggil.")
 
 
 # ──────────────────────────────────────────────
-# Embedding
+# Public generation API
+# ──────────────────────────────────────────────
+
+def call_llm(
+    prompt: str,
+    system_instruction: str = "",
+    temperature: float = ANSWER_TEMPERATURE,
+    max_tokens: int = ANSWER_MAX_TOKENS,
+    model: str = LLM_MODEL,
+    api_key: str | None = None,
+    raise_on_error: bool = False,
+) -> str:
+    """Panggil provider chat untuk jawaban akhir."""
+    if raise_on_error:
+        return _generate(
+            prompt, system_instruction, temperature, max_tokens, model, api_key
+        )
+
+    try:
+        text = _generate(
+            prompt, system_instruction, temperature, max_tokens, model, api_key
+        )
+        return text or "Maaf, saya tidak dapat menghasilkan jawaban untuk pertanyaan ini."
+    except LLMConfigError as error:
+        return f"⚠️ {error}"
+    except Exception as error:
+        message = str(error)
+        lowered = message.lower()
+        if "quota" in lowered or "rate" in lowered or "429" in message:
+            return "⚠️ Batas penggunaan API tercapai. Silakan coba lagi dalam beberapa menit."
+        if any(token in lowered for token in ("api key", "api_key", "authentication", "401")):
+            return "⚠️ API key provider tidak valid. Periksa konfigurasi secrets."
+        return f"⚠️ Terjadi kesalahan saat memproses: {message[:500]}"
+
+
+def call_utility_llm(
+    prompt: str,
+    system_instruction: str = "",
+    max_tokens: int = 1024,
+    api_key: str | None = None,
+    json_mode: bool = False,
+) -> str:
+    """Panggil provider chat untuk reranker/query rewriting."""
+    return _generate(
+        prompt=prompt,
+        system_instruction=system_instruction,
+        temperature=UTILITY_TEMPERATURE,
+        max_tokens=max_tokens,
+        model=UTILITY_MODEL,
+        api_key=api_key,
+        response_mime_type="application/json" if json_mode else None,
+    )
+
+
+def test_connection(api_key: str | None = None) -> bool:
+    """
+    Tes koneksi DAN kepatuhan provider terhadap prompt.
+
+    HTTP 200 saja tidak cukup. Endpoint Bandel yang diuji mengembalikan 200
+    tetapi mengabaikan prompt dan mengirim kalimat motivasi tetap. Probe unik
+    ini memastikan model benar-benar membaca instruksi sebelum UI/operator
+    menganggap provider siap.
+    """
+    probe = "LLM_HEALTH_PROBE_7F3C"
+    try:
+        answer = call_utility_llm(
+            f"Balas tepat dengan token {probe}. Jangan tambahkan kata lain.",
+            max_tokens=32,
+            api_key=api_key,
+        )
+        return probe in answer
+    except Exception:
+        return False
+
+
+# ──────────────────────────────────────────────
+# Gemini embedding API
 # ──────────────────────────────────────────────
 
 def embed_texts(
@@ -351,32 +515,20 @@ def embed_texts(
     max_retries: int = EMBED_MAX_RETRIES,
     progress: bool = False,
 ) -> list[list[float]]:
-    """
-    Embed banyak teks sekaligus, dengan batching dan exponential backoff.
-
-    Args:
-        texts: Daftar teks yang akan di-embed.
-        task_type: ``RETRIEVAL_DOCUMENT`` untuk chunk dokumen,
-            ``RETRIEVAL_QUERY`` untuk pertanyaan, atau ``None`` untuk
-            embedding generik (dipakai index versi lama).
-        progress: Cetak progres batch ke stdout.
-
-    Returns:
-        Daftar embedding vector, urutannya sama dengan ``texts``.
-    """
+    """Embed teks memakai Gemini khusus embedding."""
     if not texts:
         return []
 
     client = get_client(api_key)
-    config = genai_types.EmbedContentConfig(task_type=task_type) if task_type else None
+    from google.genai import types as genai_types
 
+    config = genai_types.EmbedContentConfig(task_type=task_type) if task_type else None
     all_embeddings: list[list[float]] = []
     total_batches = (len(texts) - 1) // batch_size + 1
 
     for i in range(0, len(texts), batch_size):
         batch = texts[i:i + batch_size]
         batch_num = i // batch_size + 1
-
         if progress:
             print(f"   Embedding batch {batch_num}/{total_batches} ({len(batch)} teks)...")
 
@@ -391,11 +543,11 @@ def embed_texts(
                 all_embeddings.extend(e.values for e in result.embeddings)
                 last_error = None
                 break
-            except Exception as e:
-                last_error = e
-                error_msg = str(e)
-                is_rate_limit = "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg
-                if not is_rate_limit or attempt == max_retries - 1:
+            except Exception as error:
+                last_error = error
+                message = str(error)
+                rate_limited = "429" in message or "RESOURCE_EXHAUSTED" in message
+                if not rate_limited or attempt == max_retries - 1:
                     break
                 wait = batch_delay * (2 ** attempt)
                 if progress:
@@ -414,42 +566,19 @@ def embed_texts(
     return all_embeddings
 
 
-#: Cache embedding query dalam proses.
-#: Pertanyaan yang sama sering diulang: pengguna mencoba ulang, contoh
-#: pertanyaan diklik berkali-kali, dan runner evaluasi menjalankan query yang
-#: identik untuk beberapa konfigurasi. Menyimpannya menghemat kuota API
-#: sekaligus menghilangkan satu perjalanan jaringan.
-_QUERY_EMBEDDING_CACHE: dict[tuple[str, str | None], list[float]] = {}
-_QUERY_EMBEDDING_CACHE_LIMIT = 512
-
-
 def get_query_embedding(
     query: str,
     task_type: str | None = TASK_TYPE_QUERY,
     api_key: str | None = None,
     use_cache: bool = True,
 ) -> list[float]:
-    """
-    Embedding untuk satu query pencarian.
-
-    ``task_type`` harus cocok dengan yang dipakai saat membangun index —
-    `DocumentRetriever` membacanya dari ``index/index_info.json``.
-
-    Args:
-        query: Pertanyaan yang akan di-embed.
-        task_type: Task type embedding, harus cocok dengan index.
-        api_key: Override API key Gemini.
-        use_cache: Pakai cache dalam proses untuk query yang identik.
-    """
+    """Embedding query Gemini dengan cache proses."""
     cache_key = (query, task_type)
     if use_cache and cache_key in _QUERY_EMBEDDING_CACHE:
         return _QUERY_EMBEDDING_CACHE[cache_key]
 
     embeddings = embed_texts(
-        [query],
-        task_type=task_type,
-        api_key=api_key,
-        batch_delay=0.0,
+        [query], task_type=task_type, api_key=api_key, batch_delay=0.0
     )
     if not embeddings:
         raise LLMCallError("API embedding tidak mengembalikan vector apa pun.")
@@ -465,23 +594,3 @@ def get_query_embedding(
 def clear_query_embedding_cache() -> None:
     """Kosongkan cache embedding query."""
     _QUERY_EMBEDDING_CACHE.clear()
-
-
-def test_connection(api_key: str | None = None) -> bool:
-    """
-    Cek koneksi ke Gemini API. True jika berhasil.
-
-    ``max_tokens`` sengaja dilonggarkan: pada model Gemini 2.5/3.x, token
-    *thinking* ikut dihitung ke dalam ``max_output_tokens``. Dengan batas
-    sangat kecil, model menghabiskan seluruh kuota untuk berpikir lalu
-    berhenti dengan ``finish_reason=MAX_TOKENS`` tanpa menghasilkan teks —
-    membuat koneksi yang sehat terlaporkan gagal.
-    """
-    try:
-        return bool(call_utility_llm(
-            "Balas hanya dengan kata: OK",
-            max_tokens=256,
-            api_key=api_key,
-        ))
-    except Exception:
-        return False

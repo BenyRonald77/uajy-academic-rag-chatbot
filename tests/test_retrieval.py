@@ -224,10 +224,13 @@ class TestFormatSources:
         b = candidate_factory(chunk_index=1, page_numbers=[48], section_title="Yudisium")
         assert len(format_sources([a, b]).splitlines()) == 1
 
-    def test_halaman_berbeda_jadi_baris_berbeda(self, candidate_factory):
+    def test_halaman_berbeda_digabung_ke_satu_kartu(self, candidate_factory):
+        """Kartu sumber tidak perlu satu baris per chunk."""
         a = candidate_factory(chunk_index=0, page_numbers=[48], section_title="A")
         b = candidate_factory(chunk_index=1, page_numbers=[27], section_title="B")
-        assert len(format_sources([a, b]).splitlines()) == 2
+        hasil = format_sources([a, b])
+        assert "Halaman 27, 48" in hasil
+        assert len(hasil.splitlines()) == 1
 
 
 class TestRetrievalOutcome:

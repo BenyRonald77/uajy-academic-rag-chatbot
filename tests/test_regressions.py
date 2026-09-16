@@ -296,10 +296,9 @@ class TestRetiredModelFallback:
 
         def palsu(*, model, **kwargs):
             dipanggil.append(model)
-            if model == "gemini-3.6-flash":
+            if model == "auto":
                 raise RuntimeError(
-                    "404 NOT_FOUND. This model models/gemini-3.6-flash is no "
-                    "longer available to new users."
+                    "404 NOT_FOUND. This model auto is no longer available."
                 )
             return "jawaban dari model cadangan"
 
@@ -308,7 +307,7 @@ class TestRetiredModelFallback:
         hasil = llm_client.call_llm("pertanyaan", raise_on_error=True)
 
         assert hasil == "jawaban dari model cadangan"
-        assert dipanggil[0] == "gemini-3.6-flash", "model utama harus dicoba lebih dulu"
+        assert dipanggil[0] == "auto", "model utama harus dicoba lebih dulu"
         assert len(dipanggil) >= 2, "seharusnya berpindah ke cadangan"
 
     def test_model_yang_bekerja_diingat(self, monkeypatch):
@@ -324,7 +323,7 @@ class TestRetiredModelFallback:
 
         def palsu(*, model, **kwargs):
             dipanggil.append(model)
-            if model == "gemini-3.6-flash":
+            if model == "auto":
                 raise RuntimeError("404 NOT_FOUND. model tidak tersedia")
             return "ok"
 
@@ -334,10 +333,10 @@ class TestRetiredModelFallback:
         jumlah_awal = len(dipanggil)
         llm_client.call_llm("pertanyaan kedua", raise_on_error=True)
 
-        assert dipanggil[jumlah_awal] != "gemini-3.6-flash", (
+        assert dipanggil[jumlah_awal] != "auto", (
             "permintaan kedua seharusnya langsung memakai model yang terbukti"
         )
-        assert llm_client.effective_model("gemini-3.6-flash") != "gemini-3.6-flash"
+        assert llm_client.effective_model("auto") != "auto"
 
     def test_kuota_habis_memicu_perpindahan(self, monkeypatch):
         """
@@ -357,7 +356,7 @@ class TestRetiredModelFallback:
 
         def palsu(*, model, **kwargs):
             dipanggil.append(model)
-            if model == "gemini-3.6-flash":
+            if model == "auto":
                 raise RuntimeError(
                     "429 RESOURCE_EXHAUSTED. Quota exceeded for metric: "
                     "generate_content_free_tier_requests, limit: 20"
