@@ -14,6 +14,27 @@ DEFAULT_PDF_NAME = "Buku-Pedoman-Akademik-Fakultas-Teknologi-Industri-2025-2026.
 
 
 @st.cache_data(show_spinner=False)
+def _pdf_page_pdf_bytes(path_string: str, page_number: int) -> bytes:
+    """Buat PDF satu halaman untuk dibuka di viewer native browser."""
+    document = pymupdf.open(path_string)
+    try:
+        if page_number < 1 or page_number > len(document):
+            raise ValueError(f"Halaman {page_number} di luar dokumen.")
+        single_page = pymupdf.open()
+        try:
+            single_page.insert_pdf(
+                document,
+                from_page=page_number - 1,
+                to_page=page_number - 1,
+            )
+            return single_page.tobytes()
+        finally:
+            single_page.close()
+    finally:
+        document.close()
+
+
+@st.cache_data(show_spinner=False)
 def _pdf_page_image(path_string: str, page_number: int, zoom: float = 1.5) -> bytes:
     """
     Render satu halaman PDF menjadi PNG.
@@ -124,11 +145,11 @@ def render_pdf_viewer() -> None:
 
         try:
             page_image = _pdf_page_image(str(path), selected_page)
-            encoded = base64.b64encode(page_image).decode("ascii")
+            encoded_image = base64.b64encode(page_image).decode("ascii")
             st.markdown(
                 f"""
                 <div style="background:#ffffff;border:1px solid #d8e7ef;border-radius:8px;padding:18px;text-align:center;">
-                  <img src="data:image/png;base64,{encoded}"
+                  <img src="data:image/png;base64,{encoded_image}"
                        alt="Halaman {selected_page} dari {path.name}"
                        style="display:block;width:100%;height:auto;margin:0 auto;" />
                 </div>
@@ -136,6 +157,19 @@ def render_pdf_viewer() -> None:
                 unsafe_allow_html=True,
             )
             st.caption(f"Halaman {selected_page} · {path.name}")
+
+            # PDF satu halaman berukuran kecil dibuka di tab baru memakai
+            # viewer native browser — tampilannya mengikuti screenshot
+            # referensi dengan toolbar zoom/print/download.
+            native_pdf = _pdf_page_pdf_bytes(str(path), selected_page)
+            native_encoded = base64.b64encode(native_pdf).decode("ascii")
+            st.markdown(
+                f'<a href="data:application/pdf;base64,{native_encoded}#page=1" '
+                'target="_blank" rel="noopener" '
+                'style="display:block;text-align:center;margin:10px 0 2px;color:#14809F;font-weight:700;">'
+                '↗ Buka PDF dengan viewer browser</a>',
+                unsafe_allow_html=True,
+            )
         except Exception:
             st.error("Halaman PDF tidak dapat dirender.")
 
