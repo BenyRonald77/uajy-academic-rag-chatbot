@@ -10,6 +10,7 @@ gayanya ada di `app/theme.py`.
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -19,9 +20,8 @@ import streamlit as st
 # Tambahkan root project ke sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.answer_guard import is_safe_answer
+from app.answer_guard import diagnose_answer
 from app.citations import (
-    citation_pages_are_in_context,
     extract_cited_pages,
     strip_inline_source_lines,
 )
@@ -57,6 +57,8 @@ from app.theme import (
     render_status_badge,
     render_welcome,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────
 # Page Config
@@ -441,9 +443,19 @@ def _handle_query(
             )
             response = call_llm(user_prompt, system_instruction=system_prompt)
 
-        if not is_safe_answer(response) or not citation_pages_are_in_context(
-            response, outcome.contexts
-        ):
+        context_pages = {
+            page for context in outcome.contexts for page in context.page_numbers
+        }
+        diagnostic = diagnose_answer(response, context_pages)
+        if diagnostic is not None:
+            diagnostic_code, diagnostic_detail = diagnostic
+            # Log only a safe category and page-number comparison. Do not log
+            # the provider response, prompt, API key, or user message.
+            LOGGER.warning(
+                "answer_guard_rejected code=%s detail=%s",
+                diagnostic_code,
+                diagnostic_detail,
+            )
             # Circuit breaker public: provider yang mengabaikan prompt atau
             # mengembalikan sitasi di luar konteks tidak boleh ditampilkan
             # sebagai jawaban akademik.
@@ -453,6 +465,7 @@ def _handle_query(
                     "akademik yang valid (sitasi halaman tidak ditemukan atau "
                     "tidak cocok dengan konteks retrieval). Periksa provider."
                 )
+                st.caption(f"Diagnosis ({diagnostic_code}): {diagnostic_detail}")
             else:
                 st.warning(
                     "Layanan AI belum mengembalikan jawaban dengan format yang "

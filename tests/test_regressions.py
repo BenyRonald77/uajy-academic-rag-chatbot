@@ -304,7 +304,7 @@ class TestRetiredModelFallback:
 
         monkeypatch.setattr(llm_client, "_generate_once", palsu)
 
-        hasil = llm_client.call_llm("pertanyaan", raise_on_error=True)
+        hasil = llm_client.call_llm("pertanyaan", model="auto", raise_on_error=True)
 
         assert hasil == "jawaban dari model cadangan"
         assert dipanggil[0] == "auto", "model utama harus dicoba lebih dulu"
@@ -329,9 +329,9 @@ class TestRetiredModelFallback:
 
         monkeypatch.setattr(llm_client, "_generate_once", palsu)
 
-        llm_client.call_llm("pertanyaan pertama", raise_on_error=True)
+        llm_client.call_llm("pertanyaan pertama", model="auto", raise_on_error=True)
         jumlah_awal = len(dipanggil)
-        llm_client.call_llm("pertanyaan kedua", raise_on_error=True)
+        llm_client.call_llm("pertanyaan kedua", model="auto", raise_on_error=True)
 
         assert dipanggil[jumlah_awal] != "auto", (
             "permintaan kedua seharusnya langsung memakai model yang terbukti"
@@ -365,7 +365,7 @@ class TestRetiredModelFallback:
 
         monkeypatch.setattr(llm_client, "_generate_once", palsu)
 
-        hasil = llm_client.call_llm("pertanyaan", raise_on_error=True)
+        hasil = llm_client.call_llm("pertanyaan", model="auto", raise_on_error=True)
 
         assert hasil == "jawaban dari model cadangan"
         assert len(dipanggil) >= 2, "kuota habis per-model harus memicu model lain"
@@ -388,9 +388,28 @@ class TestRetiredModelFallback:
         monkeypatch.setattr(llm_client, "_generate_once", palsu)
 
         with pytest.raises(RuntimeError, match="400"):
-            llm_client.call_llm("pertanyaan", raise_on_error=True)
+            llm_client.call_llm("pertanyaan", model="auto", raise_on_error=True)
 
         assert len(dipanggil) == 1
+
+    def test_model_disabled_memicu_fallback(self, monkeypatch):
+        from app import llm_client
+
+        dipanggil: list[str] = []
+
+        def palsu(*, model, **kwargs):
+            dipanggil.append(model)
+            if model == "auto":
+                raise RuntimeError(
+                    '403 {"error":{"code":"model_disabled"}}'
+                )
+            return "jawaban dari model cadangan"
+
+        monkeypatch.setattr(llm_client, "_generate_once", palsu)
+        hasil = llm_client.call_llm("pertanyaan", model="auto", raise_on_error=True)
+
+        assert hasil == "jawaban dari model cadangan"
+        assert dipanggil == ["auto", "deepseek-v4-flash"]
 
     def test_seluruh_rantai_gagal_melempar_galat_terakhir(self, monkeypatch):
         from app import llm_client
@@ -401,7 +420,7 @@ class TestRetiredModelFallback:
         monkeypatch.setattr(llm_client, "_generate_once", palsu)
 
         with pytest.raises(RuntimeError, match="404"):
-            llm_client.call_llm("pertanyaan", raise_on_error=True)
+            llm_client.call_llm("pertanyaan", model="auto", raise_on_error=True)
 
     def test_setiap_model_utama_punya_cadangan(self):
         """Konfigurasi tanpa cadangan mengembalikan kerapuhan yang sama."""

@@ -14,6 +14,8 @@ format, endpoint, dan hak akses yang berbeda.
 
 from __future__ import annotations
 
+import os
+import tomllib
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -36,18 +38,38 @@ INDEX_INFO_PATH = INDEX_DIR / "index_info.json"
 # Provider
 # ──────────────────────────────────────────────
 
+def _read_model_setting(name: str, default: str) -> str:
+    """Read a model ID from environment or local Streamlit secrets."""
+    value = os.environ.get(name)
+    if value and value.strip():
+        return value.strip()
+
+    secrets_path = PROJECT_ROOT / ".streamlit" / "secrets.toml"
+    try:
+        with secrets_path.open("rb") as secrets_file:
+            secrets = tomllib.load(secrets_file)
+    except (OSError, tomllib.TOMLDecodeError):
+        return default
+
+    value = secrets.get(name)
+    return str(value).strip() if value and str(value).strip() else default
+
 #: Provider chat OpenAI-compatible. Base URL dapat dioverride lewat
 #: `LLM_BASE_URL` atau `OPENAI_BASE_URL` di environment/secrets.
 LLM_BASE_URL = "https://bandelbanget.xyz/v1"
 LLM_PROVIDER = "openai_compatible"
 
-#: Model `auto` tersedia pada endpoint Bandel dan membiarkan gateway memilih
-#: model yang aktif. Cadangan dipakai bila gateway mengembalikan 404, 429,
-#: atau 503 untuk model tersebut.
-LLM_MODEL = "auto"
-UTILITY_MODEL = "auto"
+#: Pilih model eksplisit yang sudah diuji. Alias `auto` saat ini dapat
+#: diarahkan ke model yang dinonaktifkan/stok habis oleh gateway.
+LLM_MODEL = _read_model_setting("LLM_MODEL", "deepseek-v4-flash")
+UTILITY_MODEL = _read_model_setting("UTILITY_MODEL", "deepseek-v4-flash")
 MODEL_FALLBACKS: dict[str, tuple[str, ...]] = {
-    "auto": ("gpt-5.6", "claude-sonnet-5"),
+    "auto": ("deepseek-v4-flash", "glm-5.3-flash"),
+    "deepseek-v4-flash": ("glm-5.3-flash",),
+    "glm-5.3-flash": ("deepseek-v4-flash",),
+    # Keep old explicit settings recoverable when a listed model is disabled.
+    "gpt-5.6": ("deepseek-v4-flash", "glm-5.3-flash"),
+    "claude-sonnet-5": ("deepseek-v4-flash", "glm-5.3-flash"),
 }
 
 #: Embedding tetap Gemini karena endpoint Bandel yang diuji tidak menyediakan

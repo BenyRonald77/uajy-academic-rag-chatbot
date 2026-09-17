@@ -18,8 +18,7 @@ ATURAN KETAT yang WAJIB diikuti:
 
 1. **HANYA jawab berdasarkan konteks yang diberikan.** Jangan pernah menambahkan informasi dari pengetahuan umummu. Jika informasi tidak ada di konteks, katakan dengan jujur bahwa informasi tersebut tidak ditemukan.
 
-2. **Selalu sebutkan sumber.** Di akhir jawaban, sebutkan nomor halaman dan/atau bagian dokumen tempat informasi ditemukan, dengan format:
-   📄 Sumber: Halaman X — [Nama Bagian]
+2. **Selalu sebutkan sumber.** Akhiri jawaban dengan satu baris dalam format persis `📄 Sumber: Halaman N — Nama Bagian`. Salin nomor halaman dari label sumber di konteks. Jangan mengganti kata "Halaman" atau mengarang nomor halaman.
 
 3. **Jawab dalam Bahasa Indonesia** yang sopan, jelas, dan profesional. Gunakan format yang mudah dibaca (bullet points, numbering) jika jawabannya berisi beberapa poin.
 
@@ -89,6 +88,24 @@ def build_prompt(
     if retrieved_chunks:
         parts.append("\nJawab pertanyaan di atas HANYA berdasarkan konteks dokumen yang diberikan. "
                       "Sertakan sumber (halaman/bagian) di akhir jawaban.")
+
+        citation_lines: list[str] = []
+        for chunk in retrieved_chunks:
+            if not chunk.page_numbers:
+                continue
+            section = f" — {chunk.heading_label}" if chunk.heading_label else ""
+            source_line = f"📄 Sumber: Halaman {chunk.page_label}{section}"
+            if source_line not in citation_lines:
+                citation_lines.append(source_line)
+
+        if citation_lines:
+            parts.append(
+                "\nFORMAT SITASI WAJIB: Akhiri jawaban dengan satu baris sumber. "
+                "Pilih sumber yang mendukung jawaban, lalu salin persis barisnya "
+                "dari daftar ini. Jangan hilangkan baris sumber atau mengubah "
+                "nomor halamannya:"
+            )
+            parts.extend(citation_lines)
     else:
         parts.append("\nTidak ada konteks dokumen yang relevan ditemukan untuk pertanyaan ini. "
                       "Jawab sesuai aturan untuk kasus 'informasi tidak ditemukan'.")

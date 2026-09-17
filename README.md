@@ -10,7 +10,7 @@
 [![Gemini Embedding](https://img.shields.io/badge/Embedding-Gemini%20(temporary)-blue?style=flat-square)](https://ai.google.dev/)
 [![Hybrid Retrieval](https://img.shields.io/badge/Retrieval-Hybrid%20BM25%20%2B%20Dense%20(RRF)-8E44AD?style=flat-square)](#-hybrid-retrieval-pipeline)
 [![FAISS](https://img.shields.io/badge/Vector%20Store-FAISS%20CPU-26A69A?style=flat-square)](https://github.com/facebookresearch/faiss)
-[![Tests](https://img.shields.io/badge/tests-404%20passing-2ea44f?style=flat-square)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-456%20passing-2ea44f?style=flat-square)](#-testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
 [Bahasa Indonesia](#-ringkasan-proyek) · [English](#-overview)
@@ -25,26 +25,34 @@
 
 ## 📌 Overview
 
-**UAJY Academic Document RAG Chatbot** is a production-grade **Retrieval-Augmented Generation (RAG)** assistant engineered to provide verified, hallucination-free answers to students and faculty members based on the official academic handbook (*Buku Pedoman Akademik Fakultas Teknologi Industri Universitas Atma Jaya Yogyakarta 2025/2026*).
+**UAJY Academic Document RAG Chatbot** is a **Retrieval-Augmented Generation (RAG)** assistant designed to provide grounded answers to students and faculty members based on the official academic handbook (*Buku Pedoman Akademik Fakultas Teknologi Industri Universitas Atma Jaya Yogyakarta 2025/2026*).
 
 Unlike generic language models that are prone to hallucinating administrative deadlines or degree requirements, this system separates **knowledge retrieval** (local FAISS + BM25) from **response generation** (an OpenAI-compatible LLM gateway), enforcing strict ground-truth citation and explicit refusal for out-of-scope inquiries. In the current short-term deployment, the gateway handles chat/rerank/rewrite while Gemini is used only for embeddings.
+
+### Current validation status (17 September 2026)
+
+- **Verified:** 456 offline tests pass. Bandel AI uses `deepseek-v4-flash` for chat, rewriting, and reranking, with `glm-5.3-flash` as a tested fallback. Gemini provides 3072-dimensional embeddings.
+- **Also verified:** public/operator mode, rate limiting, answer guard, precise page citation parsing, and the PDF viewer. The native PDF viewer button is in commit `8ef96ac`.
+- **Still pending:** rerunning retrieval and answer evaluations with the current provider setup; correcting ALL-CAPS heading noise and rebuilding the index; a browser-based end-to-end UI check; and VPS deployment.
+
+The evaluation tables below are historical results and do not describe measured performance of the current provider setup.
 
 ---
 
 ## ✨ Key Features
 
 - 🔀 **Hybrid Retrieval:** Dense embeddings capture meaning while BM25 Okapi catches exact terms that academic documents live on — `IPK 3,51`, `144 SKS`, `Pasal 12`. Both rankings are merged with Reciprocal Rank Fusion.
-- 🎚️ **LLM Reranker:** A listwise reranker scores every candidate on whether it can actually *answer* the question, not merely resemble it. Measured impact: **MRR 0.858 → 1.000**.
+- 🎚️ **LLM Reranker:** A listwise reranker scores every candidate on whether it can actually *answer* the question, not merely resemble it. The published MRR improvement is from a historical evaluation; a new run with the current provider setup is pending.
 - 💬 **History-Aware Query Rewriting:** Follow-ups like *"berapa maksimalnya?"* are rewritten into standalone questions **before** retrieval runs, so the right context is fetched in the first place.
 - 🎯 **Strict Document Grounding:** Answers are generated **exclusively** from retrieved PDF context chunks.
 - 📑 **Precise Source Citations:** Chunks are built with per-line page tracking, so **76% of chunks cite a single page** (average 1.29 pages per chunk).
-- 🛡️ **Layered Anti-Hallucination Guardrails:** Similarity floor → IDF-weighted lexical coverage → reranker gate → strict system prompt. Out-of-scope refusal is **100%** in the full configuration.
+- 🛡️ **Layered Anti-Hallucination Guardrails:** Similarity floor → IDF-weighted lexical coverage → reranker gate → strict system prompt. The published refusal rate is from a historical evaluation and needs to be remeasured.
 - 🧹 **Extraction Noise Filtering:** Rotated org-chart diagrams and broken font encodings produce garbage text that would otherwise compete for top-k slots. 24% of raw lines are filtered at ingestion.
 - 📚 **Multi-Document Index:** One index spans many campus documents. Every chunk records its source, because "page 48" means something different in the academic handbook than in a rector's decree. Per-document search filter included.
 - 🕒 **Stale Index Detection:** Each document's SHA-256 *and* an ingestion pipeline version are recorded at build time, then re-checked on startup. A source PDF that changed, or chunking logic that improved, both surface as a warning instead of quietly answering from a stale index.
 - 🔍 **Interactive Document Explorer:** Search, filter, and inspect all 218 indexed chunks with their hierarchical section paths.
 - 📊 **Ablation Study, Not Just a Benchmark:** Compare dense-only vs hybrid vs hybrid+rerank on page-level relevance, MRR, refusal accuracy, and false-refusal rate.
-- 🧪 **429 tests, No API Key Required:** Every pure-logic module is covered, including regression guards for nine real bugs found by measurement. CI runs on every push.
+- 🧪 **456 offline tests passed:** The suite covers pure-logic modules and regression guards for bugs found through measurement. CI runs on every push.
 - 🌤️ **SIATMA-Inspired Light UI:** Light blue page background, white cards, cyan section headers, and a public student mode built with Streamlit.
 
 ---
@@ -127,7 +135,7 @@ Unlike generic language models that are prone to hallucinating administrative de
 
 **Why an LLM reranker instead of a local cross-encoder?** Multilingual cross-encoders weigh hundreds of megabytes and drag in PyTorch, which conflicts with keeping this project CPU-only and deployable on free tiers. One provider-gateway call scores all candidates.
 
-**Current provider split.** The short-term gateway at `https://bandelbanget.xyz/v1` is used for chat completions, reranking, and query rewriting. The endpoint currently does not expose `/embeddings`, so `gemini-embedding-001` remains the embedding provider until a local embedding model or compatible embedding API is configured. These two keys must be stored separately.
+**Current provider split (verified 17 September 2026).** Bandel AI at `https://bandelbanget.xyz/v1` handles chat completions, reranking, and query rewriting. Use the explicit `deepseek-v4-flash` model; `auto` currently returns `403 model_disabled`. The app retries model-specific disabled/out-of-stock errors with `glm-5.3-flash`. Both models passed connection and JSON-mode checks, and DeepSeek passed a grounded-answer smoke test after the prompt was updated to include copyable source lines. The endpoint does not expose `/embeddings`, so Gemini's `gemini-embedding-001` remains the embedding provider (3072 dimensions). Keep the Bandel and Google keys separate. Full retrieval and answer evaluation with this provider setup is still pending.
 
 **How the relevance gate actually works.** An honest note, because measurement contradicted the original design: since embeddings are built with `RETRIEVAL_DOCUMENT`/`RETRIEVAL_QUERY` task types, cosine scores compress into a narrow high band and **overlap** between relevant and irrelevant questions:
 
@@ -136,7 +144,7 @@ in-scope     : 0.762 – 0.866
 out-of-scope : 0.729 – 0.766     ← overlaps
 ```
 
-No single similarity threshold can separate them. The inherited `0.30` threshold passed **every** out-of-scope question. So the threshold was demoted to a sanity floor, and the reranker became the real precision gate — it scores out-of-scope candidates `0–1` and refuses 5/5. Turning the reranker off drops retrieval-level refusal to 0%, which the UI warns about explicitly.
+No single similarity threshold can separate them. The inherited `0.30` threshold passed every out-of-scope question in the earlier measurements, so the threshold was demoted to a sanity floor and the reranker became the precision gate. Those refusal measurements are historical; rerun the evaluation before treating them as current performance results.
 
 ---
 
@@ -195,7 +203,7 @@ ChatBot RAG kampus/
 │   ├── answer_eval.py        # Groundedness, citation, and refusal checks
 │   ├── run_answer_eval.py    # Answer-level evaluation runner
 │   └── eval_results.json     # Generated metrics + per-question detail
-├── tests/                    # 429 tests, no API key required
+├── tests/                    # 456 offline tests passed
 │   ├── conftest.py
 │   ├── test_openai_provider.py # OpenAI-compatible adapter tests
 │   ├── test_public_mode.py     # Public mode + rate limit tests
@@ -237,8 +245,8 @@ Chat, reranker, dan query rewriting memakai endpoint OpenAI-compatible Bandel AI
 # .streamlit/secrets.toml
 LLM_API_KEY = "your_bandel_api_key_here"
 LLM_BASE_URL = "https://bandelbanget.xyz/v1"
-LLM_MODEL = "auto"
-UTILITY_MODEL = "auto"
+LLM_MODEL = "deepseek-v4-flash"
+UTILITY_MODEL = "deepseek-v4-flash"
 
 # Key Google AI Studio, BERBEDA dari LLM_API_KEY
 GEMINI_EMBEDDING_API_KEY = "your_google_embedding_key_here"
@@ -287,6 +295,8 @@ python eval/run_eval.py --mode hybrid_rerank # one configuration only
 
 ### Results
 
+> **Historical baseline:** These figures come from the earlier Gemini-era evaluation. They are retained for reference, but the retrieval ablation has not yet been rerun with the current Bandel AI provider setup.
+
 Measured on 22 questions — 17 in-scope with verified page-level ground truth, 5 out-of-scope, 2 conversational follow-ups. `top_k = 4`.
 
 | Metric | Dense only | Hybrid (RRF) | **Hybrid + Rerank** |
@@ -301,11 +311,11 @@ Measured on 22 questions — 17 in-scope with verified page-level ground truth, 
 
 Zero reranker failures in this run, so the refusal figures are valid. The single keyword miss is not a retrieval failure: page 48 was retrieved at rank 1, but the phrase "cum laude" — which appears exactly once in the entire document — landed in the adjacent chunk. Page-level relevance and MRR both capture this correctly as a hit.
 
-> **Free-tier quota is per model, not per account:** 20 requests/day/model. Use `--delay 2` so the reranker is not rate-limited mid-run — it is the stage that acts as the refusal gate. The suite counts and reports reranker failures rather than letting them quietly deflate the refusal figure.
+> Provider rate limits can interrupt a run. Use `--delay` as needed and inspect the reported reranker failures; a run with reranker failures cannot support valid refusal metrics.
 
-**MRR 1.000 means the correct page ranked first for every single in-scope question.** That is what the reranker buys: hybrid fusion alone widens the candidate pool but does not order it perfectly, and it even displaced one answer (Q2, the `144 SKS` question, dropping recall to 94.1%). The reranker recovered it and put it at rank 1.
+In the historical run, **MRR 1.000 meant the correct page ranked first for every in-scope question**. Hybrid fusion alone widened the candidate pool but did not order it perfectly, and it displaced one answer (Q2, the `144 SKS` question, dropping recall to 94.1%). The reranker recovered it and put it at rank 1.
 
-The refusal column is the starkest result. Without the reranker, refusal is **0%** — see [the gate explanation above](#-hybrid-retrieval-pipeline) for why similarity thresholds cannot do this job on task-type embeddings. The extra ~1.4 s of latency is the price of that guarantee.
+In that historical run, refusal without the reranker was **0%** — see [the gate explanation above](#-hybrid-retrieval-pipeline) for why similarity thresholds cannot do this job on task-type embeddings. The measured latency increase was about 1.4 seconds in that run.
 
 ### Why these numbers differ from a typical RAG benchmark
 
@@ -325,28 +335,11 @@ This suite is deliberately harder to satisfy:
 - **False refusal rate** is tracked so a system cannot inflate its refusal score by rejecting everything.
 - **Reranker failures are counted and reported.** If the reranker fails, the refusal figures for that run are explicitly flagged as invalid rather than silently reported as passing.
 
-### Chunking quality
+### Citation heading cleanup (open)
 
-Page-precision is a prerequisite for trustworthy citations, so it is measured too:
+The current citation headings still have noise from the ALL-CAPS heading heuristic. The latest project status identifies roughly **31% of citations** as affected. The heading detection fix and index rebuild have not been completed, so earlier figures in this README claiming 0% meaningless labels or 8% questionable headings should not be treated as the current result.
 
-| Metric | Before | After |
-|---|---|---|
-| Max pages claimed by one chunk | 13 | **4** |
-| Avg pages per chunk | 1.99 | **1.29** |
-| Chunks citing a single page | — | **76%** (165/218) |
-| Chunks carrying a section heading | — | **100%** |
-| Chunks with a meaningless section label | 31% | **0%** |
-
-That last row was found by measurement, not by reading code. The rule "an all-caps line is a heading" also caught sentence fragments: `... Universitas Atma Jaya Yogyakarta (UAJY).` left behind a line reading `UAJY).`, which became the root heading for 59 chunks. Across three such fragments, **68 of 222 chunks (31%)** displayed a meaningless section label in their citation.
-
-Tightening the rule removed those, but revealed the deeper issue: this document marks its sections with capitalisation rather than "BAB", so the all-caps heuristic is load-bearing — and it also catches table column labels. One such label became the root heading for 94 chunks. Rather than tuning heuristics against a single document, citations now display the **deepest** heading instead of the full path:
-
-| Citation label | Questionable |
-|---|---|
-| Full heading path (its root) | 97/218 (**44%**) |
-| Deepest heading only | 18/218 (**8%**) |
-
-The deepest heading is also the more useful one — `H. Cuti Studi` rather than `PROGRAM › ...`. The full path is still embedded with each chunk, where the extra context helps and the noise is diluted, and remains visible in the debug panel for auditing.
+After correcting heading detection, rebuild the index and measure citation labels again before publishing updated cleanliness figures. Existing page-span measurements (average 1.29 pages per chunk and 76% single-page chunks) are historical and should also be rechecked after that rebuild.
 
 ---
 
@@ -392,6 +385,8 @@ The suite is also **honest about its own failures**: API errors are never allowe
 
 ### Results
 
+> **Historical baseline:** These answer-level figures predate the currently verified Bandel AI setup. Rerun the answer evaluation before using them to describe current groundedness, citation, or refusal performance.
+
 | Metric | Result |
 |---|---|
 | **Groundedness** | **100.0%** (16/16 judged) · avg **10.00/10** |
@@ -401,9 +396,9 @@ The suite is also **honest about its own failures**: API errors are never allowe
 | **Refusal, end-to-end** | **100.0%** (5/5 out-of-scope) |
 | **False refusal** ↓ | **0.0%** |
 
-Groundedness at a perfect average is the evidence behind the hallucination-free claim: every factual statement in every answer traced back to the retrieved context.
+The historical groundedness score is not evidence for the current provider setup until the evaluation is rerun.
 
-Two entries fell out of the run, both accounted for rather than hidden. One question hit the 20-requests/day quota ceiling and was excluded from all metrics by the generation-failure mechanism. The other produced a correct, well-grounded answer that ran out of output tokens mid-sentence before it could append its source line — the cause of the one missing citation. `ANSWER_MAX_TOKENS` was raised from 2048 to 4096 in response; on Gemini 3.x, thinking tokens count against that same budget. That fix is not yet re-measured, because the daily quota ran out.
+In that historical run, one question hit the provider quota and was excluded from all metrics by the generation-failure mechanism. Another answer ran out of output tokens before it could append its source line. `ANSWER_MAX_TOKENS` was raised from 2048 to 4096 in response; that fix also needs to be remeasured in the next answer-evaluation run.
 
 ### What this suite caught about itself
 
@@ -428,7 +423,7 @@ pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-429 tests, ~1.5 seconds, **no API key and no index required** — every test is self-contained, so CI runs safely on forks and pull requests.
+**456 offline tests passed** in the latest run. The suite requires no provider API key or built index, so CI can run safely on forks and pull requests.
 
 Coverage is concentrated where bugs actually appeared. Nine regression guards protect real failures found by measurement, not imagined ones:
 
@@ -453,20 +448,31 @@ The rerank one deserves emphasis. Its fail-safe returned candidates with `rerank
 **RAG Chatbot Dokumen Kampus UAJY** adalah asisten tanya jawab berbasis *Retrieval-Augmented Generation* (RAG) yang dirancang untuk menjawab pertanyaan seputar buku pedoman akademik Fakultas Teknologi Industri Universitas Atma Jaya Yogyakarta (FTI UAJY) Tahun Akademik 2025/2026.
 
 ### Mengapa Menggunakan RAG?
-- **Bebas Halusinasi:** Model LLM diinstruksikan menjawab **hanya** berdasarkan teks yang ditemukan di dalam dokumen PDF resmi.
+- **Jawaban Berbasis Dokumen:** Model LLM diinstruksikan menjawab **hanya** berdasarkan teks yang ditemukan di dalam dokumen PDF resmi.
 - **Kutipan Transparan:** Setiap jawaban menyertakan rujukan nomor halaman dan judul bab/pasal.
-- **Ringan & Hemat Resource:** Vector store dijalankan secara lokal via FAISS (CPU), embedding memakai Gemini sementara, sedangkan jawaban/reranker/query rewriting memakai gateway LLM OpenAI-compatible.
+- **Ringan & Hemat Resource:** Vector store dijalankan secara lokal via FAISS (CPU), embedding memakai Gemini, sedangkan jawaban/reranker/query rewriting memakai gateway Bandel AI yang OpenAI-compatible.
 
 ### Kesiapan Provider Jangka Pendek
 
-Gateway `https://bandelbanget.xyz/v1` sudah dapat dipanggil melalui `chat/completions`, tetapi pada pengujian saat ini responsnya tidak mengikuti prompt dan format JSON yang diminta — beberapa prompt berbeda menghasilkan kalimat motivasi yang sama. Karena itu gateway **belum aman untuk dipakai mahasiswa** sampai provider memperbaiki kompatibilitasnya atau memberikan base URL/model yang benar. Circuit breaker di public mode mencegah respons tanpa sitasi tampil sebagai jawaban.
+Gateway Bandel AI sudah lolos `test_connection()` dan pengujian reranker JSON: pada query "syarat SKS lulus", chunk relevan mendapat skor 10 dan chunk tidak relevan mendapat skor 0. Gateway ini digunakan untuk chat, query rewriting, dan reranking. Embedding tetap memakai Gemini dengan dimensi 3072. Pengujian ini memverifikasi provider di level modul; uji end-to-end melalui browser masih belum dilakukan.
+
+### Status proyek per 17 September 2026
+
+| Selesai dan terverifikasi | Belum dikerjakan |
+|---|---|
+| 456 tes offline lulus; mode public/operator, rate limit, dan answer guard | Menjalankan ulang `eval/run_eval.py` dan evaluasi jawaban dengan provider saat ini |
+| Provider Bandel untuk chat, rewrite, dan rerank; embedding Gemini 3072 dimensi | Memperbaiki heading ALL-CAPS dan membangun ulang index untuk membersihkan sitasi |
+| Parser sitasi presisi dan PDF viewer (termasuk tombol viewer native browser; commit `8ef96ac`) | Uji UI end-to-end di browser dan deployment VPS |
+| Reranker JSON diuji langsung dengan skor relevan 10 dan tidak relevan 0 | Dockerfile, HTTPS/reverse proxy, serta pengelola proses untuk VPS |
+
+Hasil evaluasi yang tercantum di atas adalah baseline lama, bukan angka terukur dari konfigurasi provider saat ini. Streaming jawaban, feedback 👍/👎, ekspor riwayat, dan pengembangan lanjutan multi-dokumen juga masih menjadi pekerjaan berikutnya.
 
 
 
 Pertanyaan lanjutan seperti *"berapa maksimalnya?"* ditulis ulang lebih dulu menjadi pertanyaan mandiri sebelum pencarian berjalan, sebab tanpa itu konteks yang salah sudah terambil sejak awal.
 
 ### Hasil Pengukuran
-Dari 22 pertanyaan uji, konfigurasi lengkap mencapai **MRR 1,000** — halaman yang memuat jawaban selalu berada di peringkat pertama — dengan **penolakan 100%** untuk pertanyaan di luar cakupan dan **tanpa satu pun penolakan salah**. Rinciannya ada di [bagian evaluasi](#-evaluation-ablation-study).
+Angka MRR, groundedness, dan penolakan yang ditampilkan pada bagian evaluasi adalah hasil baseline lama. Evaluasi retrieval dan jawaban dengan provider Bandel belum dijalankan ulang, jadi angka tersebut belum menggambarkan konfigurasi aktif.
 
 ### Panel Debug
 Setiap jawaban dilengkapi rincian retrieval yang bisa dibuka: skor dense, BM25, RRF, dan reranker per kandidat, jalur mana yang menemukannya, keputusan gate relevansi, serta latensi tiap tahap. Tujuannya agar proses retrieval bisa diaudit, bukan menjadi kotak hitam.
@@ -478,7 +484,7 @@ Kampus punya lebih dari satu sumber resmi: pedoman akademik, kalender akademik, 
 Hash setiap dokumen dicatat saat index dibangun, lalu diperiksa ulang setiap aplikasi dimuat. Kalau PDF sumbernya diperbarui, aplikasi memberi tahu bahwa index perlu dibangun ulang. Tanpa pemeriksaan ini, chatbot akan terus menjawab dari dokumen edisi lama dengan sitasi yang tampak sah — kegagalan yang paling sulit disadari pengguna.
 
 ### Pengujian
-404 test berjalan tanpa API key dan tanpa index, selesai dalam sekitar 1,5 detik. Sembilan di antaranya adalah penjaga terhadap bug yang benar-benar pernah terjadi dan ditemukan lewat pengukuran, termasuk gate reranker yang dulu gagal-terbuka sehingga penolakan diam-diam jatuh dari 100% ke 0% saat API sibuk. Jalankan dengan `python -m pytest`.
+456 tes offline lulus pada verifikasi terakhir, tanpa API key provider dan tanpa index. Jalankan dengan `python -m pytest`.
 
 ---
 

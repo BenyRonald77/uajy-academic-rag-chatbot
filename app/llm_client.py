@@ -59,6 +59,7 @@ _PLACEHOLDER_KEYS = {
 # Karena itu model cadangan boleh dicoba untuk 404, 429, dan 503.
 _MODEL_UNAVAILABLE_MARKERS = (
     "404", "NOT_FOUND",
+    "MODEL_DISABLED",
     "429", "RESOURCE_EXHAUSTED", "RATE_LIMIT",
     "500", "502", "503", "504", "UNAVAILABLE",
 )
